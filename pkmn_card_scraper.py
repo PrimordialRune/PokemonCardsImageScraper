@@ -165,18 +165,129 @@ class PokemonCardScraper:
             logger.error(f"Error scraping page {page_num}: {e}")
             return []
     
+    def detect_bottom_edge(self, gray_img, x0, x1, y_start, max_y):
+        """
+        Detect the bottom edge of artwork by scanning downward and analyzing edge density.
+        
+        The artwork region ends where edge density drops sharply and remains low,
+        indicating a flat text box region. This looks for the bottom border of the
+        artwork and then confirms the flat region below it.
+        
+        Args:
+            gray_img: Grayscale image
+            x0: Left boundary of artwork region
+            x1: Right boundary of artwork region
+            y_start: Starting Y position to scan from
+            max_y: Maximum Y position (limit of downward expansion)
+            
+        Returns:
+            int: Detected bottom Y coordinate
+        """
+        height, width = gray_img.shape[:2]
+        
+        # Apply Gaussian blur to reduce noise
+        blurred = cv2.GaussianBlur(gray_img, (5, 5), 0)
+        
+        # Edge detection using Canny
+        edges = cv2.Canny(blurred, 50, 150)
+        
+        # Parameters for edge density detection
+        EDGE_WINDOW = 10  # Window size (8-12 pixels as specified)
+        DROP_THRESHOLD = 0.40  # 40% reduction threshold
+        FLAT_ROWS = 15  # Number of consecutive flat rows to confirm
+        LOW_DENSITY_THRESHOLD = 0.01  # Threshold for "flat" region
+        
+        # Calculate edge density for a window of rows
+        def calculate_edge_density(y_pos):
+            """Calculate edge density in a horizontal window."""
+            if y_pos + EDGE_WINDOW > height:
+                return 0.0
+            
+            # Extract the region
+            region = edges[y_pos:y_pos + EDGE_WINDOW, x0:x1]
+            
+            # Count non-zero pixels (edges)
+            edge_pixels = np.count_nonzero(region)
+            total_pixels = region.size
+            
+            if total_pixels == 0:
+                return 0.0
+            
+            return edge_pixels / total_pixels
+        
+        # Scan downward from y_start to find density profile
+        y_current = y_start
+        
+        # First, find the peak density (likely the artwork bottom border)
+        max_density = 0.0
+        peak_y = y_start
+        
+        # Scan to find peak
+        scan_range = min(max_y - y_start, int(height * 0.25))
+        for y in range(y_start, y_start + scan_range):
+            density = calculate_edge_density(y)
+            if density > max_density:
+                max_density = density
+                peak_y = y
+        
+        logger.debug(f"Peak edge density: {max_density:.4f} at y={peak_y}")
+        
+        # If no significant peak found, use a default
+        if max_density < 0.05:
+            logger.debug("No significant peak found, using max_y")
+            return max_y
+        
+        # Now scan from the peak downward to find sustained flat region
+        y_current = peak_y + EDGE_WINDOW
+        flat_row_count = 0
+        detected_y = max_y  # Default to max if not detected
+        
+        # Look for sustained low density (flat text box)
+        while y_current < max_y:
+            current_density = calculate_edge_density(y_current)
+            
+            # Check if density is very low (flat region)
+            if current_density < LOW_DENSITY_THRESHOLD:
+                flat_row_count += 1
+                
+                # Check if we've found sustained flat region
+                if flat_row_count >= FLAT_ROWS:
+                    # Found the flat text region, use the peak as bottom
+                    detected_y = peak_y + EDGE_WINDOW // 2
+                    logger.debug(f"Flat region confirmed after y={y_current}, using peak at y={detected_y}")
+                    break
+            else:
+                # If density increases again, update peak
+                if current_density > max_density * 0.5:
+                    peak_y = y_current
+                    max_density = current_density
+                    flat_row_count = 0
+                elif current_density > LOW_DENSITY_THRESHOLD * 2:
+                    # Reset counter for moderate density
+                    flat_row_count = 0
+            
+            y_current += 1
+        
+        # Ensure we don't go beyond max_y
+        detected_y = min(detected_y, max_y)
+        
+        return detected_y
+    
     def extract_artwork(self, image_path, output_path):
         """
         Extract the artwork region from a Pokémon card using OpenCV.
         
-        Uses deterministic image processing with edge detection and
-        relative bounding box heuristics specific to Pokémon cards.
+        Uses deterministic image processing with dynamic edge detection for
+        the bottom boundary, specific to EX-era Pokémon cards.
         
         The heuristic uses:
         - x0 = 7.5% of width (left boundary)
         - y0 = 13% of height (top boundary)
         - x1 = 92.5% of width (right boundary)
-        - y1 = 52% of height (bottom boundary)
+        - y1 = dynamically detected (bottom boundary)
+        
+        Dynamic bottom detection scans downward analyzing edge density to find
+        where the artwork ends and the text box begins.
         
         Args:
             image_path: Path to the full card image
@@ -196,59 +307,31 @@ class PokemonCardScraper:
             logger.debug(f"Processing image: {width}x{height}")
             
             # Use precise bounding box heuristics for Pokémon card artwork
-            # Based on standard card layout where artwork occupies a fixed region
+            # X bounds and top Y bound are ratio-based
             x0 = int(0.075 * width)   # 7.5% from left
             y0 = int(0.13 * height)   # 13% from top
             x1 = int(0.925 * width)   # 92.5% from left (right edge)
-            y1 = int(0.52 * height)   # 52% from top (bottom edge)
             
-            # Initial crop using deterministic heuristic
+            # Initial crop using deterministic heuristic for top and sides
             art_top = y0
-            art_bottom = y1
             art_left = x0
             art_right = x1
             
-            # Optional: Validate using edge detection and expand if necessary
+            # Convert to grayscale for edge detection
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
-            # Apply Gaussian blur to reduce noise
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            # Dynamically detect bottom boundary
+            # Start scanning from a reasonable position in the artwork
+            y_start = int(0.35 * height)  # Start scanning from 35% down
             
-            # Edge detection using Canny
-            edges = cv2.Canny(blurred, 50, 150)
+            # Maximum downward expansion: +12% of card height from initial y0
+            max_y_expansion = int(0.12 * height)
+            max_y = min(int(0.52 * height) + max_y_expansion, height - 10)
             
-            # Check the crop region for significant edges
-            crop_region = edges[art_top:art_bottom, art_left:art_right]
+            # Detect the bottom edge
+            art_bottom = self.detect_bottom_edge(gray, x0, x1, y_start, max_y)
             
-            # Find contours in the crop region
-            # Note: Requires OpenCV >= 4.0 which returns (contours, hierarchy)
-            contours, _ = cv2.findContours(
-                crop_region, 
-                cv2.RETR_EXTERNAL, 
-                cv2.CHAIN_APPROX_SIMPLE
-            )
-            
-            # If we find significant contours, we can optionally refine the bounding box
-            if contours:
-                # Find the largest contour (likely the artwork region)
-                largest_contour = max(contours, key=cv2.contourArea)
-                x, y, w, h = cv2.boundingRect(largest_contour)
-                
-                # Adjust coordinates back to full image space
-                x += art_left
-                y += art_top
-                
-                # Only expand the region if the contour suggests a larger area
-                # This helps capture artwork that may extend slightly beyond the heuristic
-                # Use 80% threshold to ensure we only expand for significant contours
-                # that likely represent the actual artwork boundary
-                if w > (art_right - art_left) * 0.8 and h > (art_bottom - art_top) * 0.8:
-                    # Add minimal padding
-                    padding = 5
-                    art_left = max(x0, x - padding)
-                    art_top = max(y0, y - padding)
-                    art_right = min(x1, x + w + padding)
-                    art_bottom = min(y1, y + h + padding)
+            logger.debug(f"Detected artwork bounds: x=[{art_left}, {art_right}], y=[{art_top}, {art_bottom}]")
             
             # Crop the artwork region
             artwork = img[art_top:art_bottom, art_left:art_right]
@@ -260,7 +343,7 @@ class PokemonCardScraper:
             
             # Save the cropped artwork as PNG
             cv2.imwrite(str(output_path), artwork)
-            logger.info(f"Extracted artwork to {output_path}")
+            logger.info(f"Extracted artwork to {output_path} (size: {artwork.shape[1]}x{artwork.shape[0]})")
             return True
             
         except Exception as e:
