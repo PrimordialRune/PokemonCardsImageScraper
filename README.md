@@ -1,12 +1,14 @@
 # Pokémon Card Scraper with Artwork Extraction
 
-A Python script that downloads Pokémon card images from pkmncards.com and automatically extracts the artwork region using deterministic OpenCV image processing.
+A Python script that downloads Pokémon card images from pkmncards.com (specifically the **ex series**) and automatically extracts the artwork region using deterministic OpenCV image processing.
 
 ## Features
 
-- **Paginated Scraping**: Downloads card images using pagination with `?display=images` parameter
-- **Artwork Extraction**: Uses OpenCV with deterministic edge detection and relative bounding box heuristics to crop card artwork
-- **Organized Storage**: Saves full cards to `cards/` folder and extracted artwork to `art_only/` folder
+- **Ex Series Targeted Scraping**: Downloads cards from the ex series using `s=series%3Aex` parameter
+- **Paginated Scraping**: Handles pagination with `?display=images` parameter
+- **Artwork Extraction**: Uses OpenCV with deterministic edge detection and precise bounding box heuristics to crop card artwork
+- **Organized Storage**: Saves full cards to `cards/` folder and extracted artwork (PNG) to `art_only/` folder
+- **Deduplication**: Tracks downloaded URLs to prevent duplicate downloads
 - **Error Handling**: Comprehensive error handling with retry logic for network requests
 - **Logging**: Detailed logging to both console and file (`scraper.log`)
 - **Rate Limiting**: Built-in delays between requests to be respectful to the server
@@ -26,7 +28,7 @@ pip install -r requirements.txt
 
 ## Usage
 
-Run the scraper with default settings (5 pages):
+Run the scraper with default settings (ex series, 50 pages):
 ```bash
 python pkmn_card_scraper.py
 ```
@@ -36,50 +38,51 @@ python pkmn_card_scraper.py
 You can modify the following settings in the `main()` function:
 
 - `BASE_URL`: The base URL of the website (default: 'https://pkmncards.com')
+- `SEARCH_PARAMS`: Query parameters for filtering (default: 's=series%3Aex&sort=date&ord=auto')
 - `OUTPUT_DIR`: Root directory for output files (default: 'output')
-- `MAX_PAGES`: Number of pages to scrape (default: 5)
+- `MAX_PAGES`: Number of pages to scrape (default: 50)
 
 ### How It Works
 
-1. **Scraping**: The script visits pkmncards.com with `?display=images` parameter and extracts card image URLs from each page
+1. **Scraping**: The script visits pkmncards.com with ex series filter (`s=series%3Aex&sort=date&ord=auto&display=images`) and extracts card image URLs from each page
 2. **Downloading**: Each card image is downloaded with retry logic (3 attempts with exponential backoff)
-3. **Artwork Detection**: For each card:
-   - Applies relative bounding box heuristics (artwork is typically in the top 10-60% of the card)
-   - Uses Canny edge detection to find contours in the artwork region
-   - Refines the crop area based on detected contours
-   - Saves the cropped artwork region
-4. **Organization**: 
-   - Full cards are saved to `output/cards/`
-   - Extracted artwork is saved to `output/art_only/`
+3. **Deduplication**: URLs are tracked to prevent downloading the same card multiple times
+4. **Artwork Detection**: For each card:
+   - Applies precise bounding box heuristics (x: 7.5%-92.5%, y: 13%-52%)
+   - Uses Canny edge detection to validate and optionally refine the crop area
+   - Saves the cropped artwork region as PNG
+5. **Organization**: 
+   - Full cards are saved to `output/cards/` (original format)
+   - Extracted artwork is saved to `output/art_only/` (PNG format)
 
 ### Artwork Detection Algorithm
 
 The script uses a deterministic approach for artwork detection:
 
-1. **Relative Positioning**: Based on standard Pokémon card layout, the artwork is typically:
-   - Top: 10% from the top of the card
-   - Bottom: 60% from the top
-   - Left: 10% from the left edge
-   - Right: 90% from the left edge
+1. **Precise Bounding Box Heuristic**: Based on standard Pokémon card layout:
+   - Left boundary: 7.5% from left edge (x0 = 0.075 * width)
+   - Top boundary: 13% from top edge (y0 = 0.13 * height)
+   - Right boundary: 92.5% from left edge (x1 = 0.925 * width)
+   - Bottom boundary: 52% from top edge (y1 = 0.52 * height)
 
 2. **Edge Detection Enhancement**:
    - Converts to grayscale
    - Applies Gaussian blur to reduce noise
    - Uses Canny edge detection
    - Finds contours in the expected artwork region
-   - Refines bounding box based on largest contour
+   - Optionally expands bounding box based on detected contours (if they indicate a larger artwork area)
 
 ## Output Structure
 
 ```
 output/
-├── cards/          # Full card images
+├── cards/          # Full card images (original format)
 │   ├── card_00000.jpg
 │   ├── card_00001.jpg
 │   └── ...
-└── art_only/       # Cropped artwork only
-    ├── card_00000.jpg
-    ├── card_00001.jpg
+└── art_only/       # Cropped artwork only (PNG format)
+    ├── card_00000.png
+    ├── card_00001.png
     └── ...
 ```
 
@@ -101,6 +104,7 @@ The script includes comprehensive error handling for:
 - Invalid or corrupted images
 - Image processing failures
 - File system errors
+- Duplicate URL prevention
 
 All errors are logged with detailed information for debugging.
 
@@ -115,8 +119,9 @@ All errors are logged with detailed information for debugging.
 
 - The script includes a 1-second delay between requests to be respectful to the server
 - Failed downloads are retried up to 3 times with exponential backoff
-- Image URLs are deduplicated automatically
+- Image URLs are deduplicated automatically using a tracking set
 - The scraper will stop if it encounters a page with no images
+- Artwork is always saved as PNG format for quality preservation
 
 ## License
 

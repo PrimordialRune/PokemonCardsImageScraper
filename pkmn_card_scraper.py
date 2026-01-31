@@ -42,15 +42,17 @@ class PokemonCardScraper:
     A scraper that downloads Pokémon card images and extracts artwork regions.
     """
     
-    def __init__(self, base_url='https://pkmncards.com', output_dir='output'):
+    def __init__(self, base_url='https://pkmncards.com', output_dir='output', search_params='s=series%3Aex&sort=date&ord=auto'):
         """
         Initialize the scraper.
         
         Args:
             base_url: The base URL of the website
             output_dir: Root directory for output files
+            search_params: Query parameters for filtering (e.g., 's=series%3Aex&sort=date&ord=auto')
         """
         self.base_url = base_url
+        self.search_params = search_params
         self.output_dir = Path(output_dir)
         self.cards_dir = self.output_dir / 'cards'
         self.art_dir = self.output_dir / 'art_only'
@@ -67,6 +69,9 @@ class PokemonCardScraper:
         self.timeout = 30
         self.retry_count = 3
         self.delay_between_requests = 1  # seconds
+        
+        # Track downloaded URLs to prevent duplicates
+        self.downloaded_urls = set()
         
     def download_image(self, url, filepath):
         """
@@ -112,8 +117,8 @@ class PokemonCardScraper:
             list: List of image URLs found on the page
         """
         try:
-            # Construct URL with pagination
-            url = f"{self.base_url}/?display=images"
+            # Construct URL with search parameters and pagination
+            url = f"{self.base_url}/?{self.search_params}&display=images"
             if page_num > 1:
                 url += f"&page={page_num}"
             
@@ -132,17 +137,29 @@ class PokemonCardScraper:
                 src = img.get('src') or img.get('data-src')
                 if src and ('card' in src.lower() or 'pokemon' in src.lower()):
                     full_url = urljoin(self.base_url, src)
-                    image_urls.append(full_url)
+                    # Skip if already downloaded
+                    if full_url not in self.downloaded_urls:
+                        image_urls.append(full_url)
             
             # Also check for links to card images
             for link in soup.find_all('a'):
                 href = link.get('href', '')
                 if any(ext in href.lower() for ext in ['.jpg', '.jpeg', '.png']):
                     full_url = urljoin(self.base_url, href)
-                    image_urls.append(full_url)
+                    # Skip if already downloaded
+                    if full_url not in self.downloaded_urls:
+                        image_urls.append(full_url)
             
-            logger.info(f"Found {len(image_urls)} images on page {page_num}")
-            return list(set(image_urls))  # Remove duplicates
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_urls = []
+            for url in image_urls:
+                if url not in seen:
+                    seen.add(url)
+                    unique_urls.append(url)
+            
+            logger.info(f"Found {len(unique_urls)} new images on page {page_num}")
+            return unique_urls
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Error scraping page {page_num}: {e}")
@@ -155,9 +172,15 @@ class PokemonCardScraper:
         Uses deterministic image processing with edge detection and
         relative bounding box heuristics specific to Pokémon cards.
         
+        The heuristic uses:
+        - x0 = 7.5% of width (left boundary)
+        - y0 = 13% of height (top boundary)
+        - x1 = 92.5% of width (right boundary)
+        - y1 = 52% of height (bottom boundary)
+        
         Args:
             image_path: Path to the full card image
-            output_path: Path to save the cropped artwork
+            output_path: Path to save the cropped artwork (as PNG)
             
         Returns:
             bool: True if successful, False otherwise
@@ -172,20 +195,20 @@ class PokemonCardScraper:
             height, width = img.shape[:2]
             logger.debug(f"Processing image: {width}x{height}")
             
-            # Pokémon card artwork is typically in the upper portion of the card
-            # Using relative bounding box heuristics based on standard card layout
-            # Standard Pokémon card proportions: artwork is roughly in the top 40-60% of card
+            # Use precise bounding box heuristics for Pokémon card artwork
+            # Based on standard card layout where artwork occupies a fixed region
+            x0 = int(0.075 * width)   # 7.5% from left
+            y0 = int(0.13 * height)   # 13% from top
+            x1 = int(0.925 * width)   # 92.5% from left (right edge)
+            y1 = int(0.52 * height)   # 52% from top (bottom edge)
             
-            # Method 1: Use relative positioning (deterministic approach)
-            # Artwork typically starts at ~8-12% from top and ~8-12% from sides
-            # and extends to ~55-65% height and ~88-92% width
+            # Initial crop using deterministic heuristic
+            art_top = y0
+            art_bottom = y1
+            art_left = x0
+            art_right = x1
             
-            art_top = int(height * 0.10)      # 10% from top
-            art_bottom = int(height * 0.60)   # 60% from top
-            art_left = int(width * 0.10)      # 10% from left
-            art_right = int(width * 0.90)     # 90% from left
-            
-            # Method 2: Enhance with edge detection for fine-tuning
+            # Optional: Validate using edge detection and expand if necessary
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
             # Apply Gaussian blur to reduce noise
@@ -194,16 +217,18 @@ class PokemonCardScraper:
             # Edge detection using Canny
             edges = cv2.Canny(blurred, 50, 150)
             
-            # Find contours in the upper region where artwork typically is
+            # Check the crop region for significant edges
+            crop_region = edges[art_top:art_bottom, art_left:art_right]
+            
+            # Find contours in the crop region
             # Note: Requires OpenCV >= 4.0 which returns (contours, hierarchy)
-            upper_region = edges[art_top:art_bottom, art_left:art_right]
             contours, _ = cv2.findContours(
-                upper_region, 
+                crop_region, 
                 cv2.RETR_EXTERNAL, 
                 cv2.CHAIN_APPROX_SIMPLE
             )
             
-            # If we find significant contours, use them to refine the bounding box
+            # If we find significant contours, we can optionally refine the bounding box
             if contours:
                 # Find the largest contour (likely the artwork region)
                 largest_contour = max(contours, key=cv2.contourArea)
@@ -213,24 +238,25 @@ class PokemonCardScraper:
                 x += art_left
                 y += art_top
                 
-                # Apply some padding and sanity checks
-                padding = 10
-                x = max(art_left, x - padding)
-                y = max(art_top, y - padding)
-                w = min(art_right - x, w + 2 * padding)
-                h = min(art_bottom - y, h + 2 * padding)
-                
-                # Only use contour-based crop if it's reasonable
-                if w > width * 0.3 and h > height * 0.2:
-                    art_top = y
-                    art_bottom = y + h
-                    art_left = x
-                    art_right = x + w
+                # Only expand the region if the contour suggests a larger area
+                # This helps capture artwork that may extend slightly beyond the heuristic
+                if w > (art_right - art_left) * 0.8 and h > (art_bottom - art_top) * 0.8:
+                    # Add minimal padding
+                    padding = 5
+                    art_left = max(x0, x - padding)
+                    art_top = max(y0, y - padding)
+                    art_right = min(x1, x + w + padding)
+                    art_bottom = min(y1, y + h + padding)
             
             # Crop the artwork region
             artwork = img[art_top:art_bottom, art_left:art_right]
             
-            # Save the cropped artwork
+            # Ensure output path has .png extension
+            output_path = Path(output_path)
+            if output_path.suffix.lower() != '.png':
+                output_path = output_path.with_suffix('.png')
+            
+            # Save the cropped artwork as PNG
             cv2.imwrite(str(output_path), artwork)
             logger.info(f"Extracted artwork to {output_path}")
             return True
@@ -267,10 +293,16 @@ class PokemonCardScraper:
             filename = f"{base_name}_{card_index:05d}.{extension}"
             
             card_path = self.cards_dir / filename
-            art_path = self.art_dir / filename
+            
+            # For artwork, always use PNG extension
+            art_filename = f"{base_name}_{card_index:05d}.png"
+            art_path = self.art_dir / art_filename
             
             # Download the card image
             if self.download_image(image_url, card_path):
+                # Mark URL as downloaded
+                self.downloaded_urls.add(image_url)
+                
                 # Extract artwork from the card
                 self.extract_artwork(card_path, art_path)
                 return True
@@ -334,18 +366,23 @@ def main():
     """
     Main entry point for the scraper.
     """
-    # Configuration
+    # Configuration for ex series cards
     BASE_URL = 'https://pkmncards.com'
+    SEARCH_PARAMS = 's=series%3Aex&sort=date&ord=auto'
     OUTPUT_DIR = 'output'
-    MAX_PAGES = 5  # Adjust as needed
+    MAX_PAGES = 50  # Adjust as needed to cover all ex series cards
     
     logger.info("=" * 80)
-    logger.info("Pokémon Card Scraper with Artwork Extraction")
+    logger.info("Pokémon Card Scraper - Ex Series with Artwork Extraction")
     logger.info("=" * 80)
     
     try:
         # Create and run scraper
-        scraper = PokemonCardScraper(base_url=BASE_URL, output_dir=OUTPUT_DIR)
+        scraper = PokemonCardScraper(
+            base_url=BASE_URL, 
+            output_dir=OUTPUT_DIR,
+            search_params=SEARCH_PARAMS
+        )
         scraper.run(max_pages=MAX_PAGES)
         
     except Exception as e:

@@ -33,12 +33,11 @@ def create_synthetic_card(width=400, height=560):
     border_color = (200, 200, 200)
     cv2.rectangle(card, (0, 0), (width-1, height-1), border_color, 20)
     
-    # Add artwork region in the upper portion (with distinctive color/pattern)
-    # Artwork typically occupies top 10-60% of card, centered horizontally
-    art_top = int(height * 0.10)
-    art_bottom = int(height * 0.60)
-    art_left = int(width * 0.10)
-    art_right = int(width * 0.90)
+    # Add artwork region using the new heuristics (7.5%, 13%, 92.5%, 52%)
+    art_left = int(width * 0.075)
+    art_top = int(height * 0.13)
+    art_right = int(width * 0.925)
+    art_bottom = int(height * 0.52)
     
     # Fill artwork region with a gradient (to simulate actual artwork)
     for y in range(art_top, art_bottom):
@@ -85,11 +84,14 @@ def test_extraction():
     cv2.imwrite(str(test_card_path), synthetic_card)
     logger.info(f"Saved test card to {test_card_path}")
     
-    # Test extraction
-    logger.info("Testing artwork extraction...")
-    scraper = PokemonCardScraper(output_dir='test_output')
+    # Test extraction with ex series parameters
+    logger.info("Testing artwork extraction with ex series heuristics...")
+    scraper = PokemonCardScraper(
+        output_dir='test_output',
+        search_params='s=series%3Aex&sort=date&ord=auto'
+    )
     
-    test_art_path = test_art / 'test_card.jpg'
+    test_art_path = test_art / 'test_card.png'  # Should be PNG now
     success = scraper.extract_artwork(test_card_path, test_art_path)
     
     if success:
@@ -101,6 +103,10 @@ def test_extraction():
             h, w = extracted.shape[:2]
             logger.info(f"  Original card: {CARD_WIDTH}x{CARD_HEIGHT}")
             logger.info(f"  Extracted artwork: {w}x{h}")
+            
+            # Check if output is PNG
+            if test_art_path.suffix == '.png':
+                logger.info("✓ Output format is PNG as expected!")
             
             # Check if dimensions are reasonable (should be smaller than original)
             if w < CARD_WIDTH and h < CARD_HEIGHT and w > MIN_ART_WIDTH and h > MIN_ART_HEIGHT:

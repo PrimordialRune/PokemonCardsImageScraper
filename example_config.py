@@ -2,7 +2,7 @@
 """
 Example configuration file for the Pokémon Card Scraper.
 
-This demonstrates how to customize the scraper's behavior.
+This demonstrates how to customize the scraper's behavior for ex series cards.
 """
 
 from pkmn_card_scraper import PokemonCardScraper
@@ -18,10 +18,11 @@ logging.basicConfig(
     ]
 )
 
-# Create scraper with custom settings
+# Create scraper with custom settings for ex series
 scraper = PokemonCardScraper(
     base_url='https://pkmncards.com',
-    output_dir='my_cards'  # Custom output directory
+    output_dir='my_ex_cards',  # Custom output directory
+    search_params='s=series%3Aex&sort=date&ord=auto'  # Ex series filter
 )
 
 # Customize scraper settings
@@ -31,4 +32,5 @@ scraper.delay_between_requests = 2  # 2 second delay between requests
 
 # Run the scraper
 # Adjust max_pages based on how many cards you want to download
-scraper.run(max_pages=10)  # Download from 10 pages
+# Ex series has hundreds of cards, so you may need many pages
+scraper.run(max_pages=50)  # Download from 50 pages
