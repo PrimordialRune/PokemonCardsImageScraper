@@ -195,6 +195,7 @@ class PokemonCardScraper:
             edges = cv2.Canny(blurred, 50, 150)
             
             # Find contours in the upper region where artwork typically is
+            # Note: Requires OpenCV >= 4.0 which returns (contours, hierarchy)
             upper_region = edges[art_top:art_bottom, art_left:art_right]
             contours, _ = cv2.findContours(
                 upper_region, 
@@ -254,14 +255,15 @@ class PokemonCardScraper:
             parsed_url = urlparse(image_url)
             filename = os.path.basename(parsed_url.path)
             
-            # Sanitize filename
-            filename = re.sub(r'[^\w\-.]', '_', filename)
+            # Sanitize filename - collapse multiple underscores
+            filename = re.sub(r'[^\w\-\.]+', '_', filename)
             if not filename or len(filename) < 4:
                 filename = f"card_{card_index:05d}.jpg"
             
             # Ensure unique filename
-            base_name = filename.rsplit('.', 1)[0]
-            extension = filename.rsplit('.', 1)[1] if '.' in filename else 'jpg'
+            parts = filename.rsplit('.', 1)
+            base_name = parts[0]
+            extension = parts[1] if len(parts) > 1 else 'jpg'
             filename = f"{base_name}_{card_index:05d}.{extension}"
             
             card_path = self.cards_dir / filename

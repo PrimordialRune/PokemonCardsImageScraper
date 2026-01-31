@@ -64,6 +64,12 @@ def test_extraction():
     """Test the artwork extraction on a synthetic card."""
     from pkmn_card_scraper import PokemonCardScraper
     
+    # Test card dimensions
+    CARD_WIDTH = 400
+    CARD_HEIGHT = 560
+    MIN_ART_WIDTH = 100
+    MIN_ART_HEIGHT = 100
+    
     # Create test directories
     test_dir = Path('test_output')
     test_cards = test_dir / 'cards'
@@ -72,7 +78,7 @@ def test_extraction():
     test_art.mkdir(parents=True, exist_ok=True)
     
     logger.info("Creating synthetic test card...")
-    synthetic_card = create_synthetic_card()
+    synthetic_card = create_synthetic_card(CARD_WIDTH, CARD_HEIGHT)
     
     # Save the synthetic card
     test_card_path = test_cards / 'test_card.jpg'
@@ -93,11 +99,11 @@ def test_extraction():
         extracted = cv2.imread(str(test_art_path))
         if extracted is not None:
             h, w = extracted.shape[:2]
-            logger.info(f"  Original card: 400x560")
+            logger.info(f"  Original card: {CARD_WIDTH}x{CARD_HEIGHT}")
             logger.info(f"  Extracted artwork: {w}x{h}")
             
             # Check if dimensions are reasonable (should be smaller than original)
-            if w < 400 and h < 560 and w > 100 and h > 100:
+            if w < CARD_WIDTH and h < CARD_HEIGHT and w > MIN_ART_WIDTH and h > MIN_ART_HEIGHT:
                 logger.info("✓ Extracted dimensions look reasonable!")
                 return True
             else:
