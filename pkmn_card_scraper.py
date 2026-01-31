@@ -108,13 +108,13 @@ class PokemonCardScraper:
     
     def scrape_page(self, page_num=1):
         """
-        Scrape a single page to find card image URLs.
+        Scrape a single page to find card image URLs and metadata.
         
         Args:
             page_num: Page number to scrape
             
         Returns:
-            list: List of image URLs found on the page
+            list: List of tuples (image_url, card_metadata) found on the page
         """
         try:
             # Construct URL with search parameters and pagination
@@ -130,42 +130,127 @@ class PokemonCardScraper:
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Find all image elements (adjust selectors based on actual site structure)
-            # This is a generic approach - may need adjustment for actual site
-            image_urls = []
+            # Find card entries - pkmncards.com specific structure
+            # Cards are typically in links with card images
+            cards = []
             
-            # Look for images in common card display patterns
-            for img in soup.find_all('img'):
-                src = img.get('src') or img.get('data-src')
-                if src and ('card' in src.lower() or 'pokemon' in src.lower()):
-                    full_url = urljoin(self.base_url, src)
-                    # Skip if already downloaded
-                    if full_url not in self.downloaded_urls:
-                        image_urls.append(full_url)
-            
-            # Also check for links to card images
+            # Look for card links (e.g., <a href="/card/rs1-1/"> or similar)
             for link in soup.find_all('a'):
                 href = link.get('href', '')
-                if any(ext in href.lower() for ext in ['.jpg', '.jpeg', '.png']):
-                    full_url = urljoin(self.base_url, href)
-                    # Skip if already downloaded
-                    if full_url not in self.downloaded_urls:
-                        image_urls.append(full_url)
+                
+                # Find images within links
+                img = link.find('img')
+                if img:
+                    img_src = img.get('src') or img.get('data-src')
+                    if img_src and ('card' in img_src.lower() or 'pokemon' in img_src.lower()):
+                        full_url = urljoin(self.base_url, img_src)
+                        
+                        # Skip if already downloaded
+                        if full_url in self.downloaded_urls:
+                            continue
+                        
+                        # Extract metadata from link or image
+                        metadata = self.extract_card_metadata(link, img, href)
+                        cards.append((full_url, metadata))
             
             # Remove duplicates while preserving order
             seen = set()
-            unique_urls = []
-            for url in image_urls:
+            unique_cards = []
+            for url, metadata in cards:
                 if url not in seen:
                     seen.add(url)
-                    unique_urls.append(url)
+                    unique_cards.append((url, metadata))
             
-            logger.info(f"Found {len(unique_urls)} new images on page {page_num}")
-            return unique_urls
+            logger.info(f"Found {len(unique_cards)} new cards on page {page_num}")
+            return unique_cards
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Error scraping page {page_num}: {e}")
             return []
+    
+    def extract_card_metadata(self, link, img, href):
+        """
+        Extract card metadata (set, number, name) from HTML elements.
+        
+        Handles the format: {name}-{full_set_name}-{set_code}-{number}
+        Example: aggron-ruby-sapphire-rs-1 -> set=rs, number=1, name=aggron
+        
+        Args:
+            link: BeautifulSoup link element
+            img: BeautifulSoup img element
+            href: Link href attribute
+            
+        Returns:
+            dict: Card metadata with keys 'set', 'number', 'name'
+        """
+        metadata = {'set': '', 'number': '', 'name': ''}
+        
+        # Try to extract from image src/alt/title
+        if img:
+            # Get the image source to extract filename
+            img_src = img.get('src') or img.get('data-src', '')
+            
+            # Extract filename from URL
+            if img_src:
+                # Get just the filename without path
+                filename = os.path.basename(urlparse(img_src).path)
+                # Remove extension
+                filename = filename.rsplit('.', 1)[0]
+                
+                # Parse format: {name}-{full_set_name}-{set_code}-{number}_{index}
+                # Example: aggron-ruby-sapphire-rs-1_00001
+                # We need to extract: name=aggron, set=rs, number=1
+                
+                # Remove trailing _{index} if present
+                filename = re.sub(r'_\d+$', '', filename)
+                
+                # Split by dashes
+                parts = filename.split('-')
+                
+                if len(parts) >= 2:
+                    # Last part should be {set_code}-{number} or just {number}
+                    last_part = parts[-1]
+                    
+                    # Check if the second-to-last part is the set code (2-3 letters)
+                    if len(parts) >= 2:
+                        potential_set = parts[-2]
+                        # Set code is typically 2-4 letters
+                        if len(potential_set) <= 4 and potential_set.isalpha():
+                            metadata['set'] = potential_set.lower()
+                            metadata['number'] = last_part
+                            # Everything before the set code is the name (excluding full set name)
+                            # Take only the first part as the name
+                            metadata['name'] = parts[0].lower()
+                        else:
+                            # Fallback: try to parse from last part
+                            # Format might be: setcode-number (e.g., rs-1)
+                            set_num_match = re.match(r'([a-z]+)(\d+)', last_part, re.IGNORECASE)
+                            if set_num_match:
+                                metadata['set'] = set_num_match.group(1).lower()
+                                metadata['number'] = set_num_match.group(2)
+                                metadata['name'] = parts[0].lower()
+            
+            # Try alt text as fallback for name
+            if not metadata['name']:
+                alt = img.get('alt', '')
+                if alt:
+                    # Clean up alt text
+                    name_text = re.sub(r'[^a-zA-Z\s]', '', alt).strip()
+                    name_parts = name_text.split()
+                    if name_parts:
+                        metadata['name'] = name_parts[0].lower()
+        
+        # Try href as additional source
+        if href and not (metadata['set'] and metadata['number']):
+            # Pattern: /card/{set}{number}-{variant}/ or /card/{set}-{number}/
+            match = re.search(r'/card/([a-z]+)[\-]?(\d+)', href, re.IGNORECASE)
+            if match:
+                if not metadata['set']:
+                    metadata['set'] = match.group(1).lower()
+                if not metadata['number']:
+                    metadata['number'] = match.group(2)
+        
+        return metadata
     
     def detect_bottom_edge(self, gray_img, color_img, x0, x1, y_start, max_y):
         """
@@ -444,37 +529,41 @@ class PokemonCardScraper:
             logger.error(f"Error extracting artwork from {image_path}: {e}")
             return False
     
-    def process_card(self, image_url, card_index):
+    def process_card(self, image_url, card_metadata, card_index):
         """
         Download a card image and extract its artwork.
         
         Args:
             image_url: URL of the card image
-            card_index: Index for naming the file
+            card_metadata: Dict with 'set', 'number', 'name' keys
+            card_index: Index for naming fallback
             
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            # Generate filename from URL or use index
-            parsed_url = urlparse(image_url)
-            filename = os.path.basename(parsed_url.path)
+            # Generate filename from metadata or fallback to index
+            if card_metadata['set'] and card_metadata['number'] and card_metadata['name']:
+                # Format: {set}_{number}_{name}.png
+                base_name = f"{card_metadata['set']}_{card_metadata['number']}_{card_metadata['name']}"
+            else:
+                # Fallback: try to extract from URL or use index
+                parsed_url = urlparse(image_url)
+                url_filename = os.path.basename(parsed_url.path)
+                url_filename = re.sub(r'[^\w\-]+', '_', url_filename)
+                base_name = url_filename.rsplit('.', 1)[0] if url_filename else f"card_{card_index:05d}"
             
-            # Sanitize filename - collapse multiple underscores
-            filename = re.sub(r'[^\w\-\.]+', '_', filename)
-            if not filename or len(filename) < 4:
-                filename = f"card_{card_index:05d}.jpg"
+            # Sanitize filename: lowercase, collapse multiple underscores
+            base_name = base_name.lower()
+            base_name = re.sub(r'_+', '_', base_name)
+            base_name = re.sub(r'[^\w\-]+', '_', base_name)
             
-            # Ensure unique filename
-            parts = filename.rsplit('.', 1)
-            base_name = parts[0]
-            extension = parts[1] if len(parts) > 1 else 'jpg'
-            filename = f"{base_name}_{card_index:05d}.{extension}"
+            # Full card filename: {set}_{number}_{name}.png
+            card_filename = f"{base_name}.png"
+            card_path = self.cards_dir / card_filename
             
-            card_path = self.cards_dir / filename
-            
-            # For artwork, always use PNG extension
-            art_filename = f"{base_name}_{card_index:05d}.png"
+            # Artwork filename: {set}_{number}_{name}_board.png
+            art_filename = f"{base_name}_board.png"
             art_path = self.art_dir / art_filename
             
             # Download the card image
@@ -507,16 +596,16 @@ class PokemonCardScraper:
         
         for page_num in range(1, max_pages + 1):
             try:
-                # Scrape the page for image URLs
-                image_urls = self.scrape_page(page_num)
+                # Scrape the page for card data (URL + metadata)
+                cards = self.scrape_page(page_num)
                 
-                if not image_urls:
-                    logger.warning(f"No images found on page {page_num}, stopping")
+                if not cards:
+                    logger.warning(f"No cards found on page {page_num}, stopping")
                     break
                 
-                # Process each image
-                for url in image_urls:
-                    if self.process_card(url, card_index):
+                # Process each card
+                for url, metadata in cards:
+                    if self.process_card(url, metadata, card_index):
                         total_downloaded += 1
                     
                     card_index += 1
@@ -524,7 +613,7 @@ class PokemonCardScraper:
                     # Delay between requests to be polite
                     time.sleep(self.delay_between_requests)
                 
-                logger.info(f"Completed page {page_num}: {len(image_urls)} images processed")
+                logger.info(f"Completed page {page_num}: {len(cards)} cards processed")
                 
                 # Delay between pages
                 time.sleep(self.delay_between_requests * 2)
