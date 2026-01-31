@@ -368,7 +368,7 @@ class PokemonCardScraper:
         
         The detection uses:
         - x0 = 7.5% of width (left boundary, ratio-based)
-        - y0 = 13% of height (top boundary, ratio-based)
+        - y0 = 9.5% of height (top boundary, ratio-based)
         - x1 = 92.5% of width (right boundary, ratio-based)
         - y1 = dynamically detected (bottom boundary)
         
@@ -400,7 +400,7 @@ class PokemonCardScraper:
             # Use precise bounding box heuristics for Pokémon card artwork
             # X bounds and top Y bound are ratio-based
             x0 = int(0.075 * width)   # 7.5% from left
-            y0 = int(0.13 * height)   # 13% from top
+            y0 = int(0.095 * height)  # 9.5% from top (adjusted to capture top of artwork)
             x1 = int(0.925 * width)   # 92.5% from left (right edge)
             
             # Initial crop using deterministic heuristic for top and sides
@@ -413,11 +413,11 @@ class PokemonCardScraper:
             
             # Dynamically detect bottom boundary using both edge density and color histogram
             # Start scanning from a reasonable position in the artwork
-            y_start = int(0.35 * height)  # Start scanning from 35% down
+            y_start = int(0.25 * height)  # Start scanning from 25% down (earlier to catch artwork properly)
             
             # Maximum downward expansion: +12% of card height from initial y0
             max_y_expansion = int(0.12 * height)
-            max_y = min(int(0.52 * height) + max_y_expansion, height - 10)
+            max_y = min(int(0.48 * height) + max_y_expansion, height - 10)  # Adjusted to stop before text box
             
             # Detect the bottom edge using combined edge density + histogram analysis
             art_bottom = self.detect_bottom_edge(gray, img, x0, x1, y_start, max_y)
