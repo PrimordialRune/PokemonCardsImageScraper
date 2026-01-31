@@ -22,9 +22,10 @@ python pkmn_card_scraper.py
 The script will:
 1. Visit pkmncards.com with EX series filter (`s=series%3Aex&sort=date&ord=auto&display=images`)
 2. Download card images from up to 50 pages (configurable)
-3. Use OpenCV with **dynamic bottom-edge detection** to extract artwork:
+3. Use OpenCV with **combined frame boundary detection** to extract artwork:
    - Fixed bounds: 7.5%-92.5% width, 13% from top
-   - **Dynamic bottom**: Scans for edge density peaks and flat regions
+   - **Dynamic bottom**: Analyzes both edge density and color histograms
+   - Identifies the border between artwork and text box
    - Captures full holo backgrounds typical of EX-era cards
 4. Save full cards and artwork separately
 5. Prevent duplicate downloads using URL tracking
@@ -49,11 +50,11 @@ To verify artwork extraction works correctly:
 python test_artwork_extraction.py
 ```
 
-This creates a synthetic card and tests the dynamic bottom-edge detection algorithm.
+This creates a synthetic card and tests the combined edge density + histogram detection algorithm.
 
 ## Artwork Extraction Details
 
-The algorithm uses **dynamic bottom-edge detection**:
+The algorithm uses **combined frame boundary detection**:
 
 **Fixed Boundaries:**
 - **x0 = 7.5%** of width (left boundary)
@@ -61,16 +62,30 @@ The algorithm uses **dynamic bottom-edge detection**:
 - **x1 = 92.5%** of width (right boundary)
 
 **Dynamic Bottom Boundary:**
-- Scans downward from ~35% of card height
-- Calculates edge density using Canny(50, 150) in 10-pixel windows
-- Finds peak edge density (artwork border)
-- Confirms flat region below (text box) persists for ≥15 rows
+Uses two methods simultaneously to identify the card frame:
+
+1. **Edge Density Analysis**
+   - Scans downward from ~35% of card height
+   - Calculates edge density using Canny(50, 150) in 10-pixel windows
+   - Finds peak edge density (artwork border)
+   - Checks for sustained low edge density (<0.01)
+
+2. **Color Histogram Analysis**
+   - Calculates color histograms (32 bins per BGR channel)
+   - Compares baseline (artwork) with current region
+   - Detects color shift between artwork and text box
+   - Uses correlation coefficient (<0.7 = significant change)
+
+**Combined Detection:**
+- Both conditions must be met for ≥10 consecutive rows:
+  - Edge density drops sharply (flat region)
+  - Color histogram shifts significantly (content change)
 - Maximum expansion: +12% of card height
 
 **Example on 400x560 card:**
 - Old fixed approach: 340x219 pixels (bottom at 52% = 291px)
 - New dynamic approach: 340x249 pixels (bottom at 57% = 321px)
-- **Captures 30 more pixels** of extended artwork/holo background
+- **Captures 30 more pixels** with more reliable boundary detection
 
 ## Troubleshooting
 

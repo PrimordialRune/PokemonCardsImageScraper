@@ -6,10 +6,11 @@ A Python script that downloads Pokémon card images from pkmncards.com (specific
 
 - **EX Series Targeted Scraping**: Downloads cards from the EX series using `s=series%3Aex` parameter
 - **Paginated Scraping**: Handles pagination with `?display=images` parameter
-- **Dynamic Artwork Extraction**: Uses OpenCV with deterministic edge detection and dynamic bottom boundary detection
+- **Dynamic Artwork Extraction**: Uses OpenCV with combined edge detection and color histogram analysis
   - X bounds and top Y are ratio-based (7.5%-92.5% width, 13% from top)
-  - **Bottom boundary is detected dynamically** by analyzing edge density
-  - Captures full holo backgrounds and extended artwork regions typical of EX-era cards
+  - **Bottom boundary is detected dynamically** by analyzing the card frame
+  - Uses both horizontal edge density (Canny) and color histogram shifts
+  - Identifies the precise border between artwork and text box
 - **Organized Storage**: Saves full cards to `cards/` folder and extracted artwork (PNG) to `art_only/` folder
 - **Deduplication**: Tracks downloaded URLs to prevent duplicate downloads
 - **Error Handling**: Comprehensive error handling with retry logic for network requests
@@ -50,13 +51,14 @@ You can modify the following settings in the `main()` function:
 1. **Scraping**: The script visits pkmncards.com with EX series filter (`s=series%3Aex&sort=date&ord=auto&display=images`) and extracts card image URLs from each page
 2. **Downloading**: Each card image is downloaded with retry logic (3 attempts with exponential backoff)
 3. **Deduplication**: URLs are tracked to prevent downloading the same card multiple times
-4. **Dynamic Artwork Detection**: For each card:
+4. **Frame Boundary Detection**: For each card:
    - Applies ratio-based bounds for left, right, and top (7.5%, 92.5%, 13%)
-   - **Dynamically detects the bottom boundary** by:
-     - Scanning downward from the artwork region
-     - Computing horizontal edge density using Canny edge detection
-     - Finding where edge density peaks (artwork border) then drops and stays flat
-     - Confirming flat region persists for ≥15 rows (text box)
+   - **Dynamically detects the bottom boundary** by analyzing the card frame:
+     - Scans downward from the artwork region
+     - Computes horizontal edge density using Canny edge detection
+     - Calculates color histogram for each region
+     - Identifies where edge density drops sharply AND color histogram shifts
+     - Confirms sustained boundary for ≥10 consecutive rows
    - Saves the cropped artwork region as PNG
 5. **Organization**: 
    - Full cards are saved to `output/cards/` (original format)
@@ -71,22 +73,37 @@ The script uses a **hybrid deterministic approach** for artwork detection:
    - Top boundary: 13% from top edge (y0 = 0.13 * height)
    - Right boundary: 92.5% from left edge (x1 = 0.925 * width)
 
-2. **Dynamic Bottom Boundary Detection**:
+2. **Dynamic Bottom Boundary Detection** (frame analysis):
+   
+   **Phase 1: Edge Density Analysis**
    - Scans downward from ~35% of card height
    - Calculates edge density in 10-pixel windows using Canny(50, 150)
    - Finds peak edge density (typically the artwork bottom border)
-   - Confirms sustained flat region below the peak (text box area)
-   - Uses the peak position as the bottom boundary
-   - Maximum expansion: +12% of card height from initial position
+   
+   **Phase 2: Color Histogram Analysis**
+   - Calculates color histogram baseline from artwork region
+   - Uses 32 bins per BGR channel (96 bins total)
+   - Compares histograms using correlation method
+   - Detects significant color shift between artwork and text box
+   
+   **Combined Detection**
+   - Both conditions must be met simultaneously:
+     - Edge density < 0.01 (flat region)
+     - Histogram similarity < 0.7 (color change)
+   - Requires ≥10 consecutive rows meeting both criteria
+   - Maximum expansion: +12% of card height
    
    **Key Parameters:**
    - Edge detector: Canny(50, 150)
    - Edge density window: 10 pixels
+   - Histogram window: 15 pixels
+   - Histogram bins: 32 per channel
    - Low density threshold: <0.01 (flat region indicator)
-   - Sustained flat confirmation: ≥15 consecutive rows
+   - Histogram similarity threshold: <0.7 (correlation coefficient)
+   - Combined flat confirmation: ≥10 consecutive rows
    - Maximum downward expansion: +12% of card height
 
-This approach ensures the extracted artwork includes the full illustration box, including extended holo backgrounds common in EX-era cards, while excluding the text box below.
+This dual-method approach ensures reliable frame boundary detection by identifying both the physical border (edges) and the content transition (color), making it robust across different card designs and lighting conditions.
 
 ## Output Structure
 
@@ -110,7 +127,7 @@ The script logs all activities to:
 
 Log levels:
 - INFO: General progress and successful operations
-- DEBUG: Detailed edge detection information
+- DEBUG: Detailed edge detection and histogram information
 - WARNING: Recoverable errors (e.g., failed download attempts)
 - ERROR: Unrecoverable errors (e.g., failed after all retries)
 
@@ -139,7 +156,7 @@ All errors are logged with detailed information for debugging.
 - Image URLs are deduplicated automatically using a tracking set
 - The scraper will stop if it encounters a page with no images
 - Artwork is always saved as PNG format for quality preservation
-- Dynamic bottom detection adapts to individual card layouts, capturing extended artwork regions
+- Frame boundary detection adapts to individual card layouts using both edge and color analysis
 
 ## License
 
