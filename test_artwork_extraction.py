@@ -39,10 +39,10 @@ def create_synthetic_card(width=400, height=560):
     cv2.rectangle(card, (0, 0), (width-1, height-1), border_color, 20)
     
     # Add artwork region - extended for EX-era cards
-    # Using updated boundaries: 9.5% top
+    # Using updated boundaries: 6.5% top
     art_left = int(width * 0.075)
-    art_top = int(height * 0.095)  # Updated to match new detection (9.5%)
-    art_right = int(width * 0.925)
+    art_top = int(height * 0.065)  # Updated to match new detection (6.5%)
+    art_right = int(width * 0.945)
     # Make artwork extend to ~56% for proper detection
     art_bottom = int(height * 0.56)
     
@@ -132,7 +132,7 @@ def test_extraction():
             logger.info(f"  Extracted artwork: {w}x{h}")
             
             # Calculate detected bottom boundary (using new top boundary)
-            art_top = int(CARD_HEIGHT * 0.095)  # Updated to 9.5%
+            art_top = int(CARD_HEIGHT * 0.065)  # Updated to 6.5%
             detected_bottom = art_top + h
             logger.info(f"  Detected bottom at: {detected_bottom}px ({detected_bottom/CARD_HEIGHT*100:.1f}% of card height)")
             
