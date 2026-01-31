@@ -199,7 +199,7 @@ class PokemonCardScraper:
             contours, _ = cv2.findContours(
                 upper_region, 
                 cv2.RETR_EXTERNAL, 
-                cv2.CONTOUR_APPROX_SIMPLE
+                cv2.CHAIN_APPROX_SIMPLE
             )
             
             # If we find significant contours, use them to refine the bounding box

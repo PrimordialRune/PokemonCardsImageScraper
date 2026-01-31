@@ -2,6 +2,7 @@
 output/
 cards/
 art_only/
+test_output/
 
 # Log files
 *.log
