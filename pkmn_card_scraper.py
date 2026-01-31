@@ -240,6 +240,8 @@ class PokemonCardScraper:
                 
                 # Only expand the region if the contour suggests a larger area
                 # This helps capture artwork that may extend slightly beyond the heuristic
+                # Use 80% threshold to ensure we only expand for significant contours
+                # that likely represent the actual artwork boundary
                 if w > (art_right - art_left) * 0.8 and h > (art_bottom - art_top) * 0.8:
                     # Add minimal padding
                     padding = 5
@@ -366,11 +368,11 @@ def main():
     """
     Main entry point for the scraper.
     """
-    # Configuration for ex series cards
+    # Configuration for EX series cards
     BASE_URL = 'https://pkmncards.com'
     SEARCH_PARAMS = 's=series%3Aex&sort=date&ord=auto'
     OUTPUT_DIR = 'output'
-    MAX_PAGES = 50  # Adjust as needed to cover all ex series cards
+    MAX_PAGES = 50  # EX series has ~1000 cards; adjust based on cards per page (typically 20-30)
     
     logger.info("=" * 80)
     logger.info("Pokémon Card Scraper - Ex Series with Artwork Extraction")

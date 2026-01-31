@@ -1,10 +1,10 @@
 # Pokémon Card Scraper with Artwork Extraction
 
-A Python script that downloads Pokémon card images from pkmncards.com (specifically the **ex series**) and automatically extracts the artwork region using deterministic OpenCV image processing.
+A Python script that downloads Pokémon card images from pkmncards.com (specifically the **EX series**) and automatically extracts the artwork region using deterministic OpenCV image processing.
 
 ## Features
 
-- **Ex Series Targeted Scraping**: Downloads cards from the ex series using `s=series%3Aex` parameter
+- **EX Series Targeted Scraping**: Downloads cards from the EX series using `s=series%3Aex` parameter
 - **Paginated Scraping**: Handles pagination with `?display=images` parameter
 - **Artwork Extraction**: Uses OpenCV with deterministic edge detection and precise bounding box heuristics to crop card artwork
 - **Organized Storage**: Saves full cards to `cards/` folder and extracted artwork (PNG) to `art_only/` folder
@@ -28,7 +28,7 @@ pip install -r requirements.txt
 
 ## Usage
 
-Run the scraper with default settings (ex series, 50 pages):
+Run the scraper with default settings (EX series, 50 pages):
 ```bash
 python pkmn_card_scraper.py
 ```
@@ -40,11 +40,11 @@ You can modify the following settings in the `main()` function:
 - `BASE_URL`: The base URL of the website (default: 'https://pkmncards.com')
 - `SEARCH_PARAMS`: Query parameters for filtering (default: 's=series%3Aex&sort=date&ord=auto')
 - `OUTPUT_DIR`: Root directory for output files (default: 'output')
-- `MAX_PAGES`: Number of pages to scrape (default: 50)
+- `MAX_PAGES`: Number of pages to scrape (default: 50 for EX series)
 
 ### How It Works
 
-1. **Scraping**: The script visits pkmncards.com with ex series filter (`s=series%3Aex&sort=date&ord=auto&display=images`) and extracts card image URLs from each page
+1. **Scraping**: The script visits pkmncards.com with EX series filter (`s=series%3Aex&sort=date&ord=auto&display=images`) and extracts card image URLs from each page
 2. **Downloading**: Each card image is downloaded with retry logic (3 attempts with exponential backoff)
 3. **Deduplication**: URLs are tracked to prevent downloading the same card multiple times
 4. **Artwork Detection**: For each card:

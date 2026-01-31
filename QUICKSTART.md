@@ -20,7 +20,7 @@ python pkmn_card_scraper.py
 ## What It Does
 
 The script will:
-1. Visit pkmncards.com with ex series filter (`s=series%3Aex&sort=date&ord=auto&display=images`)
+1. Visit pkmncards.com with EX series filter (`s=series%3Aex&sort=date&ord=auto&display=images`)
 2. Download card images from up to 50 pages (configurable)
 3. Use OpenCV with precise heuristics (7.5%-92.5% width, 13%-52% height) to detect and crop artwork
 4. Save full cards and artwork separately
@@ -34,7 +34,7 @@ def main():
     BASE_URL = 'https://pkmncards.com'
     SEARCH_PARAMS = 's=series%3Aex&sort=date&ord=auto'  # Change series filter
     OUTPUT_DIR = 'output'                                # Change output folder
-    MAX_PAGES = 50                                       # Adjust page limit
+    MAX_PAGES = 50                                       # Adjust page limit (EX series ~1000 cards)
 ```
 
 Or use `example_config.py` as a template for advanced customization.
@@ -46,7 +46,7 @@ To verify artwork extraction works correctly:
 python test_artwork_extraction.py
 ```
 
-This creates a synthetic card and tests the extraction algorithm with the ex series heuristics.
+This creates a synthetic card and tests the extraction algorithm with the EX series heuristics.
 
 ## Artwork Extraction Details
 
