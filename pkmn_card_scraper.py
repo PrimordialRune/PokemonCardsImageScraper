@@ -196,6 +196,9 @@ class PokemonCardScraper:
         DROP_THRESHOLD = 0.40  # 40% reduction threshold
         FLAT_ROWS = 15  # Number of consecutive flat rows to confirm
         LOW_DENSITY_THRESHOLD = 0.01  # Threshold for "flat" region
+        MIN_PEAK_DENSITY = 0.05  # Minimum density to consider a valid peak
+        PEAK_UPDATE_THRESHOLD = 0.5  # Threshold (50%) for updating peak density
+        MODERATE_DENSITY_MULTIPLIER = 2  # Multiplier for moderate density check
         
         # Calculate edge density for a window of rows
         def calculate_edge_density(y_pos):
@@ -233,7 +236,7 @@ class PokemonCardScraper:
         logger.debug(f"Peak edge density: {max_density:.4f} at y={peak_y}")
         
         # If no significant peak found, use a default
-        if max_density < 0.05:
+        if max_density < MIN_PEAK_DENSITY:
             logger.debug("No significant peak found, using max_y")
             return max_y
         
@@ -258,11 +261,11 @@ class PokemonCardScraper:
                     break
             else:
                 # If density increases again, update peak
-                if current_density > max_density * 0.5:
+                if current_density > max_density * PEAK_UPDATE_THRESHOLD:
                     peak_y = y_current
                     max_density = current_density
                     flat_row_count = 0
-                elif current_density > LOW_DENSITY_THRESHOLD * 2:
+                elif current_density > LOW_DENSITY_THRESHOLD * MODERATE_DENSITY_MULTIPLIER:
                     # Reset counter for moderate density
                     flat_row_count = 0
             

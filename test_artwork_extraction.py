@@ -91,9 +91,10 @@ def test_extraction():
     CARD_HEIGHT = 560
     MIN_ART_WIDTH = 100
     MIN_ART_HEIGHT = 100
-    # Expected bottom should be around 58% (325px) due to dynamic detection
-    EXPECTED_ART_BOTTOM_MIN = int(CARD_HEIGHT * 0.55)  # Should detect beyond 52%
-    EXPECTED_ART_BOTTOM_MAX = int(CARD_HEIGHT * 0.64)  # But not too far
+    # Expected bottom should be around 58% (325px) due to synthetic card layout
+    # Tighter range: 56-60% to validate algorithm accuracy
+    EXPECTED_ART_BOTTOM_MIN = int(CARD_HEIGHT * 0.56)  # 313px
+    EXPECTED_ART_BOTTOM_MAX = int(CARD_HEIGHT * 0.60)  # 336px
     
     # Create test directories
     test_dir = Path('test_output')
@@ -138,22 +139,38 @@ def test_extraction():
             # Check if output is PNG
             if test_art_path.suffix == '.png':
                 logger.info("✓ Output format is PNG as expected!")
+            else:
+                logger.error("✗ Output format is not PNG")
+                return False
             
             # Check if dimensions are reasonable
             if w < CARD_WIDTH and h < CARD_HEIGHT and w > MIN_ART_WIDTH and h > MIN_ART_HEIGHT:
                 logger.info("✓ Extracted dimensions look reasonable!")
             else:
-                logger.warning("⚠ Extracted dimensions seem off")
+                logger.error("✗ Extracted dimensions are outside acceptable range")
                 return False
             
             # Verify dynamic detection worked (should extend beyond old 52% boundary)
-            if detected_bottom > EXPECTED_ART_BOTTOM_MIN and detected_bottom < EXPECTED_ART_BOTTOM_MAX:
-                logger.info(f"✓ Dynamic bottom detection worked! Extended beyond 52% ({int(CARD_HEIGHT*0.52)}px)")
+            old_bottom = int(CARD_HEIGHT * 0.52)
+            if detected_bottom > old_bottom:
+                logger.info(f"✓ Dynamic bottom detection extended beyond 52% ({old_bottom}px)")
+            else:
+                logger.error(f"✗ Detection did not extend beyond old 52% boundary")
+                return False
+            
+            # Check if detection is within expected range for synthetic card
+            if detected_bottom >= EXPECTED_ART_BOTTOM_MIN and detected_bottom <= EXPECTED_ART_BOTTOM_MAX:
+                logger.info(f"✓ Bottom detection within expected range [{EXPECTED_ART_BOTTOM_MIN}, {EXPECTED_ART_BOTTOM_MAX}]")
                 return True
             else:
                 logger.warning(f"⚠ Bottom detection outside expected range [{EXPECTED_ART_BOTTOM_MIN}, {EXPECTED_ART_BOTTOM_MAX}]")
-                logger.info("  This may still be acceptable depending on the card")
-                return True  # Still consider it a pass, just with a warning
+                # For synthetic cards, this is more strict
+                if abs(detected_bottom - int(CARD_HEIGHT * 0.58)) < 20:
+                    logger.info("  Within tolerance of target (58%), considering acceptable")
+                    return True
+                else:
+                    logger.error("  Too far from expected value, test failed")
+                    return False
         else:
             logger.error("✗ Failed to read extracted artwork")
             return False
