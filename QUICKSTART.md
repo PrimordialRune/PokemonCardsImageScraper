@@ -22,7 +22,10 @@ python pkmn_card_scraper.py
 The script will:
 1. Visit pkmncards.com with EX series filter (`s=series%3Aex&sort=date&ord=auto&display=images`)
 2. Download card images from up to 50 pages (configurable)
-3. Use OpenCV with precise heuristics (7.5%-92.5% width, 13%-52% height) to detect and crop artwork
+3. Use OpenCV with **dynamic bottom-edge detection** to extract artwork:
+   - Fixed bounds: 7.5%-92.5% width, 13% from top
+   - **Dynamic bottom**: Scans for edge density peaks and flat regions
+   - Captures full holo backgrounds typical of EX-era cards
 4. Save full cards and artwork separately
 5. Prevent duplicate downloads using URL tracking
 
@@ -46,17 +49,28 @@ To verify artwork extraction works correctly:
 python test_artwork_extraction.py
 ```
 
-This creates a synthetic card and tests the extraction algorithm with the EX series heuristics.
+This creates a synthetic card and tests the dynamic bottom-edge detection algorithm.
 
 ## Artwork Extraction Details
 
-The algorithm uses precise bounding box coordinates:
+The algorithm uses **dynamic bottom-edge detection**:
+
+**Fixed Boundaries:**
 - **x0 = 7.5%** of width (left boundary)
 - **y0 = 13%** of height (top boundary)
 - **x1 = 92.5%** of width (right boundary)
-- **y1 = 52%** of height (bottom boundary)
 
-These are validated and optionally refined using Canny edge detection.
+**Dynamic Bottom Boundary:**
+- Scans downward from ~35% of card height
+- Calculates edge density using Canny(50, 150) in 10-pixel windows
+- Finds peak edge density (artwork border)
+- Confirms flat region below (text box) persists for ≥15 rows
+- Maximum expansion: +12% of card height
+
+**Example on 400x560 card:**
+- Old fixed approach: 340x219 pixels (bottom at 52% = 291px)
+- New dynamic approach: 340x249 pixels (bottom at 57% = 321px)
+- **Captures 30 more pixels** of extended artwork/holo background
 
 ## Troubleshooting
 
@@ -67,9 +81,10 @@ These are validated and optionally refined using Canny edge detection.
 - Ensure the search parameters match available series
 
 **Artwork extraction looks wrong?**
-- The algorithm is tuned for standard Pokémon TCG card layouts
-- Different card formats may need adjustment to the heuristics
-- Check the constants in `extract_artwork()` method
+- The algorithm is tuned for standard Pokémon TCG EX-era card layouts
+- Different card formats may need adjustment to the parameters
+- Check debug logs for edge density information
+- The dynamic detection adapts to each card's layout
 
 **Rate limiting or timeouts?**
 - Increase `delay_between_requests` in the scraper

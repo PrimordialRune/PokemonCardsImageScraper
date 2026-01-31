@@ -1,12 +1,15 @@
 # Pokémon Card Scraper with Artwork Extraction
 
-A Python script that downloads Pokémon card images from pkmncards.com (specifically the **EX series**) and automatically extracts the artwork region using deterministic OpenCV image processing.
+A Python script that downloads Pokémon card images from pkmncards.com (specifically the **EX series**) and automatically extracts the artwork region using deterministic OpenCV image processing with **dynamic bottom-edge detection**.
 
 ## Features
 
 - **EX Series Targeted Scraping**: Downloads cards from the EX series using `s=series%3Aex` parameter
 - **Paginated Scraping**: Handles pagination with `?display=images` parameter
-- **Artwork Extraction**: Uses OpenCV with deterministic edge detection and precise bounding box heuristics to crop card artwork
+- **Dynamic Artwork Extraction**: Uses OpenCV with deterministic edge detection and dynamic bottom boundary detection
+  - X bounds and top Y are ratio-based (7.5%-92.5% width, 13% from top)
+  - **Bottom boundary is detected dynamically** by analyzing edge density
+  - Captures full holo backgrounds and extended artwork regions typical of EX-era cards
 - **Organized Storage**: Saves full cards to `cards/` folder and extracted artwork (PNG) to `art_only/` folder
 - **Deduplication**: Tracks downloaded URLs to prevent duplicate downloads
 - **Error Handling**: Comprehensive error handling with retry logic for network requests
@@ -47,9 +50,13 @@ You can modify the following settings in the `main()` function:
 1. **Scraping**: The script visits pkmncards.com with EX series filter (`s=series%3Aex&sort=date&ord=auto&display=images`) and extracts card image URLs from each page
 2. **Downloading**: Each card image is downloaded with retry logic (3 attempts with exponential backoff)
 3. **Deduplication**: URLs are tracked to prevent downloading the same card multiple times
-4. **Artwork Detection**: For each card:
-   - Applies precise bounding box heuristics (x: 7.5%-92.5%, y: 13%-52%)
-   - Uses Canny edge detection to validate and optionally refine the crop area
+4. **Dynamic Artwork Detection**: For each card:
+   - Applies ratio-based bounds for left, right, and top (7.5%, 92.5%, 13%)
+   - **Dynamically detects the bottom boundary** by:
+     - Scanning downward from the artwork region
+     - Computing horizontal edge density using Canny edge detection
+     - Finding where edge density peaks (artwork border) then drops and stays flat
+     - Confirming flat region persists for ≥15 rows (text box)
    - Saves the cropped artwork region as PNG
 5. **Organization**: 
    - Full cards are saved to `output/cards/` (original format)
@@ -57,20 +64,29 @@ You can modify the following settings in the `main()` function:
 
 ### Artwork Detection Algorithm
 
-The script uses a deterministic approach for artwork detection:
+The script uses a **hybrid deterministic approach** for artwork detection:
 
-1. **Precise Bounding Box Heuristic**: Based on standard Pokémon card layout:
+1. **Fixed Boundaries** (ratio-based):
    - Left boundary: 7.5% from left edge (x0 = 0.075 * width)
    - Top boundary: 13% from top edge (y0 = 0.13 * height)
    - Right boundary: 92.5% from left edge (x1 = 0.925 * width)
-   - Bottom boundary: 52% from top edge (y1 = 0.52 * height)
 
-2. **Edge Detection Enhancement**:
-   - Converts to grayscale
-   - Applies Gaussian blur to reduce noise
-   - Uses Canny edge detection
-   - Finds contours in the expected artwork region
-   - Optionally expands bounding box based on detected contours (if they indicate a larger artwork area)
+2. **Dynamic Bottom Boundary Detection**:
+   - Scans downward from ~35% of card height
+   - Calculates edge density in 10-pixel windows using Canny(50, 150)
+   - Finds peak edge density (typically the artwork bottom border)
+   - Confirms sustained flat region below the peak (text box area)
+   - Uses the peak position as the bottom boundary
+   - Maximum expansion: +12% of card height from initial position
+   
+   **Key Parameters:**
+   - Edge detector: Canny(50, 150)
+   - Edge density window: 10 pixels
+   - Low density threshold: <0.01 (flat region indicator)
+   - Sustained flat confirmation: ≥15 consecutive rows
+   - Maximum downward expansion: +12% of card height
+
+This approach ensures the extracted artwork includes the full illustration box, including extended holo backgrounds common in EX-era cards, while excluding the text box below.
 
 ## Output Structure
 
@@ -94,6 +110,7 @@ The script logs all activities to:
 
 Log levels:
 - INFO: General progress and successful operations
+- DEBUG: Detailed edge detection information
 - WARNING: Recoverable errors (e.g., failed download attempts)
 - ERROR: Unrecoverable errors (e.g., failed after all retries)
 
@@ -122,6 +139,7 @@ All errors are logged with detailed information for debugging.
 - Image URLs are deduplicated automatically using a tracking set
 - The scraper will stop if it encounters a page with no images
 - Artwork is always saved as PNG format for quality preservation
+- Dynamic bottom detection adapts to individual card layouts, capturing extended artwork regions
 
 ## License
 
