@@ -80,11 +80,11 @@ Uses two methods simultaneously to identify the card frame:
 - Both conditions must be met for ≥10 consecutive rows:
   - Edge density drops sharply (flat region)
   - Color histogram shifts significantly (content change)
-- Maximum expansion: +12% of card height
+- Maximum expansion: +8% of card height (conservative to avoid text)
 
 **Example on 400x560 card:**
 - Old fixed approach: 340x219 pixels (bottom at 52% = 291px)
-- New dynamic approach: 340x249 pixels (bottom at 57% = 321px)
+- Current approach: 340x259 pixels (bottom at 56% = 312px, stops before text)
 - **Captures 30 more pixels** with more reliable boundary detection
 
 ## Troubleshooting

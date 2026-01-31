@@ -91,7 +91,7 @@ The script uses a **hybrid deterministic approach** for artwork detection:
      - Edge density < 0.01 (flat region)
      - Histogram similarity < 0.7 (color change)
    - Requires ≥10 consecutive rows meeting both criteria
-   - Maximum expansion: +12% of card height
+   - Maximum expansion: +8% of card height (conservative to avoid text)
    
    **Key Parameters:**
    - Edge detector: Canny(50, 150)
@@ -99,9 +99,9 @@ The script uses a **hybrid deterministic approach** for artwork detection:
    - Histogram window: 15 pixels
    - Histogram bins: 32 per channel
    - Low density threshold: <0.01 (flat region indicator)
-   - Histogram similarity threshold: <0.7 (correlation coefficient)
+   - Histogram similarity threshold: <0.6 (correlation coefficient, strict)
    - Combined flat confirmation: ≥10 consecutive rows
-   - Maximum downward expansion: +12% of card height
+   - Maximum downward expansion: +8% of card height (56% max)
 
 This dual-method approach ensures reliable frame boundary detection by identifying both the physical border (edges) and the content transition (color), making it robust across different card designs and lighting conditions.
 
