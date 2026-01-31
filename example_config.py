@@ -19,10 +19,15 @@ logging.basicConfig(
 )
 
 # Create scraper with custom settings for EX series
+# The artwork_bottom_ratio parameter controls where the bottom crop occurs
+# - 0.50 (50%) = more conservative, may cut off artwork
+# - 0.56 (56%) = default, captures full artwork without text (recommended)
+# - 0.60 (60%) = more liberal, may include some text
 scraper = PokemonCardScraper(
     base_url='https://pkmncards.com',
     output_dir='my_ex_cards',  # Custom output directory
-    search_params='s=series%3Aex&sort=date&ord=auto'  # EX series filter
+    search_params='s=series%3Aex&sort=date&ord=auto',  # EX series filter
+    artwork_bottom_ratio=0.56  # Adjust this percentage to control bottom crop
 )
 
 # Customize scraper settings

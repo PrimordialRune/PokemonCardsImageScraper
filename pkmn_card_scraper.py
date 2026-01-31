@@ -42,7 +42,7 @@ class PokemonCardScraper:
     A scraper that downloads Pokémon card images and extracts artwork regions.
     """
     
-    def __init__(self, base_url='https://pkmncards.com', output_dir='output', search_params='s=series%3Aex&sort=date&ord=auto'):
+    def __init__(self, base_url='https://pkmncards.com', output_dir='output', search_params='s=series%3Aex&sort=date&ord=auto', artwork_bottom_ratio=0.56):
         """
         Initialize the scraper.
         
@@ -50,12 +50,16 @@ class PokemonCardScraper:
             base_url: The base URL of the website
             output_dir: Root directory for output files
             search_params: Query parameters for filtering (e.g., 's=series%3Aex&sort=date&ord=auto')
+            artwork_bottom_ratio: Fixed percentage for bottom boundary of artwork (default: 0.56 = 56%)
         """
         self.base_url = base_url
         self.search_params = search_params
         self.output_dir = Path(output_dir)
         self.cards_dir = self.output_dir / 'cards'
         self.art_dir = self.output_dir / 'art_only'
+        
+        # Artwork extraction parameters
+        self.artwork_bottom_ratio = artwork_bottom_ratio  # Fixed percentage for y1
         
         # Create output directories
         self.cards_dir.mkdir(parents=True, exist_ok=True)
@@ -167,220 +171,20 @@ class PokemonCardScraper:
             logger.error(f"Error scraping page {page_num}: {e}")
             return []
     
-    def detect_bottom_edge(self, gray_img, color_img, x0, x1, y_start, max_y):
-        """
-        Detect the bottom edge of artwork by analyzing the card frame boundary.
-        
-        Uses a combination of:
-        - Horizontal edge density (Canny edge detection)
-        - Color histogram shift between artwork and uniform text box
-        
-        The artwork region ends where both:
-        1. Edge density drops sharply for ≥10 consecutive rows
-        2. Color histogram similarity falls below threshold
-        
-        Args:
-            gray_img: Grayscale image for edge detection
-            color_img: Full color image for histogram analysis
-            x0: Left boundary of artwork region
-            x1: Right boundary of artwork region
-            y_start: Starting Y position to scan from
-            max_y: Maximum Y position (limit of downward expansion)
-            
-        Returns:
-            int: Detected bottom Y coordinate
-        """
-        height, width = gray_img.shape[:2]
-        
-        # ===== EDGE DETECTION PARAMETERS =====
-        # Gaussian blur kernel size for noise reduction
-        BLUR_KERNEL = (5, 5)
-        
-        # Canny edge detection thresholds
-        CANNY_LOW = 50   # Lower threshold for edge detection
-        CANNY_HIGH = 150  # Upper threshold for edge detection
-        
-        # Edge density window size (pixels)
-        EDGE_WINDOW = 10  # Window size for calculating edge density
-        
-        # Edge density thresholds
-        LOW_DENSITY_THRESHOLD = 0.01  # Threshold for "flat" region (very low edges)
-        MIN_PEAK_DENSITY = 0.05  # Minimum density to consider a valid peak
-        PEAK_UPDATE_THRESHOLD = 0.5  # Threshold (50%) for updating peak density
-        MODERATE_DENSITY_MULTIPLIER = 2  # Multiplier for moderate density check
-        
-        # Consecutive flat rows required for confirmation
-        FLAT_ROWS_REQUIRED = 10  # Number of consecutive flat rows to confirm boundary
-        
-        # ===== COLOR HISTOGRAM PARAMETERS =====
-        # Histogram bins per channel (more bins = more sensitive to color changes)
-        HISTOGRAM_BINS = 32  # Number of bins per color channel
-        
-        # Histogram comparison window size
-        HISTOGRAM_WINDOW = 15  # Height of region for histogram comparison
-        
-        # Histogram similarity threshold (0-1, lower = more different)
-        # Using correlation: 1.0 = identical, 0.0 = uncorrelated, -1.0 = opposite
-        HISTOGRAM_SIMILARITY_THRESHOLD = 0.6  # Below this = significant color change (stricter)
-        
-        # Combined detection parameters
-        # Both edge density AND histogram conditions must be met
-        COMBINED_FLAT_ROWS = 10  # Rows where both conditions are true
-        
-        # Apply Gaussian blur to reduce noise
-        blurred = cv2.GaussianBlur(gray_img, BLUR_KERNEL, 0)
-        
-        # Edge detection using Canny
-        edges = cv2.Canny(blurred, CANNY_LOW, CANNY_HIGH)
-        
-        def calculate_edge_density(y_pos):
-            """Calculate horizontal edge density in a window of rows."""
-            if y_pos + EDGE_WINDOW > height:
-                return 0.0
-            
-            # Extract the region
-            region = edges[y_pos:y_pos + EDGE_WINDOW, x0:x1]
-            
-            # Count non-zero pixels (edges)
-            edge_pixels = np.count_nonzero(region)
-            total_pixels = region.size
-            
-            if total_pixels == 0:
-                return 0.0
-            
-            return edge_pixels / total_pixels
-        
-        def calculate_color_histogram(y_pos):
-            """
-            Calculate color histogram for a region.
-            
-            Returns normalized histogram for BGR channels combined.
-            """
-            if y_pos + HISTOGRAM_WINDOW > height:
-                return None
-            
-            # Extract color region
-            region = color_img[y_pos:y_pos + HISTOGRAM_WINDOW, x0:x1]
-            
-            # Calculate histogram for each channel
-            histograms = []
-            for channel in range(3):  # BGR channels
-                hist = cv2.calcHist([region], [channel], None, [HISTOGRAM_BINS], [0, 256])
-                hist = cv2.normalize(hist, hist).flatten()
-                histograms.append(hist)
-            
-            # Combine histograms from all channels
-            combined_hist = np.concatenate(histograms)
-            
-            return combined_hist
-        
-        def compare_histograms(hist1, hist2):
-            """
-            Compare two histograms using correlation method.
-            
-            Returns:
-                float: Correlation coefficient (1.0 = identical, 0.0 = uncorrelated)
-            """
-            if hist1 is None or hist2 is None:
-                return 1.0  # Assume similar if can't compare
-            
-            # Use correlation method (range: -1 to 1, where 1 = perfect match)
-            similarity = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)
-            
-            return similarity
-        
-        # ===== PHASE 1: Find peak edge density (artwork border) =====
-        max_density = 0.0
-        peak_y = y_start
-        
-        # Scan to find peak
-        scan_range = min(max_y - y_start, int(height * 0.25))
-        for y in range(y_start, y_start + scan_range):
-            density = calculate_edge_density(y)
-            if density > max_density:
-                max_density = density
-                peak_y = y
-        
-        logger.debug(f"Peak edge density: {max_density:.4f} at y={peak_y}")
-        
-        # If no significant peak found, use default
-        if max_density < MIN_PEAK_DENSITY:
-            logger.debug("No significant peak found, using max_y")
-            return max_y
-        
-        # ===== PHASE 2: Combined detection using edge density + histogram =====
-        # Calculate baseline histogram from artwork region (before peak)
-        baseline_y = max(y_start, peak_y - 30)  # Sample from artwork region
-        baseline_histogram = calculate_color_histogram(baseline_y)
-        
-        y_current = peak_y + EDGE_WINDOW
-        combined_flat_count = 0
-        detected_y = max_y  # Default to max if not detected
-        
-        # Scan downward looking for combined conditions
-        while y_current < max_y:
-            current_density = calculate_edge_density(y_current)
-            current_histogram = calculate_color_histogram(y_current)
-            
-            # Check edge density condition
-            edge_is_flat = current_density < LOW_DENSITY_THRESHOLD
-            
-            # Check histogram condition
-            histogram_similarity = compare_histograms(baseline_histogram, current_histogram)
-            histogram_is_different = histogram_similarity < HISTOGRAM_SIMILARITY_THRESHOLD
-            
-            # Both conditions must be met
-            if edge_is_flat and histogram_is_different:
-                combined_flat_count += 1
-                
-                # Found sustained region meeting both criteria
-                if combined_flat_count >= COMBINED_FLAT_ROWS:
-                    detected_y = peak_y + EDGE_WINDOW // 2
-                    logger.debug(f"Frame boundary detected at y={detected_y}")
-                    logger.debug(f"  Edge density: {current_density:.4f} (< {LOW_DENSITY_THRESHOLD})")
-                    logger.debug(f"  Histogram similarity: {histogram_similarity:.4f} (< {HISTOGRAM_SIMILARITY_THRESHOLD})")
-                    break
-            else:
-                # Reset counter if conditions not met
-                # Update peak if we find higher edge density
-                if current_density > max_density * PEAK_UPDATE_THRESHOLD:
-                    peak_y = y_current
-                    max_density = current_density
-                    combined_flat_count = 0
-                    # Update baseline from new peak
-                    baseline_y = max(y_start, peak_y - 30)
-                    baseline_histogram = calculate_color_histogram(baseline_y)
-                elif current_density > LOW_DENSITY_THRESHOLD * MODERATE_DENSITY_MULTIPLIER:
-                    # Reset for moderate density
-                    combined_flat_count = 0
-            
-            y_current += 1
-        
-        # Ensure we don't go beyond max_y
-        detected_y = min(detected_y, max_y)
-        
-        return detected_y
+
     
     def extract_artwork(self, image_path, output_path):
         """
         Extract the artwork region from a Pokémon card using OpenCV.
         
-        Uses deterministic image processing with dynamic frame boundary detection
-        for the bottom edge, specific to Pokémon TCG cards.
+        Uses deterministic image processing with fixed percentage-based boundaries
+        specific to Pokémon TCG cards.
         
-        The detection uses:
-        - x0 = 7.5% of width (left boundary, ratio-based)
-        - y0 = 6.5% of height (top boundary, ratio-based)
-        - x1 = 94.5% of width (right boundary, ratio-based)
-        - y1 = dynamically detected (bottom boundary)
-        
-        Dynamic bottom detection scans downward analyzing:
-        1. Horizontal edge density (Canny edge detection)
-        2. Color histogram shifts between artwork and text box
-        
-        The frame boundary is identified where both:
-        - Edge density drops sharply for ≥10 consecutive rows
-        - Color histogram similarity falls below threshold
+        The detection uses fixed ratios:
+        - x0 = 7.5% of width (left boundary)
+        - y0 = 6.5% of height (top boundary)
+        - x1 = 94.5% of width (right boundary)
+        - y1 = configurable percentage (default 56%, set via artwork_bottom_ratio)
         
         Args:
             image_path: Path to the full card image
@@ -399,33 +203,21 @@ class PokemonCardScraper:
             height, width = img.shape[:2]
             logger.debug(f"Processing image: {width}x{height}")
             
-            # Use precise bounding box heuristics for Pokémon card artwork
-            # X bounds and top Y bound are ratio-based
+            # Use fixed bounding box ratios for Pokémon card artwork
+            # All boundaries are ratio-based for consistency across card sizes
             x0 = int(0.075 * width)   # 7.5% from left
-            y0 = int(0.065 * height)  # 6.5% from top (adjusted to capture top of artwork)
+            y0 = int(0.065 * height)  # 6.5% from top
             x1 = int(0.945 * width)   # 94.5% from left (right edge)
+            y1 = int(self.artwork_bottom_ratio * height)  # Configurable bottom boundary
             
-            # Initial crop using deterministic heuristic for top and sides
+            # Define crop boundaries
             art_top = y0
             art_left = x0
             art_right = x1
+            art_bottom = y1
             
-            # Convert to grayscale for edge detection
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            
-            # Dynamically detect bottom boundary using both edge density and color histogram
-            # Start scanning from a reasonable position in the artwork
-            y_start = int(0.25 * height)  # Start scanning from 25% down (earlier to catch artwork properly)
-            
-            # Maximum downward expansion: more conservative to avoid text
-            # Reduced from +12% to +8% to stop before text region
-            max_y_expansion = int(0.08 * height)
-            max_y = min(int(0.48 * height) + max_y_expansion, height - 10)  # Max ~56% to avoid text
-            
-            # Detect the bottom edge using combined edge density + histogram analysis
-            art_bottom = self.detect_bottom_edge(gray, img, x0, x1, y_start, max_y)
-            
-            logger.debug(f"Detected artwork bounds: x=[{art_left}, {art_right}], y=[{art_top}, {art_bottom}]")
+            logger.debug(f"Artwork bounds: x=[{art_left}, {art_right}], y=[{art_top}, {art_bottom}]")
+            logger.debug(f"Using bottom ratio: {self.artwork_bottom_ratio:.1%}")
             
             # Crop the artwork region
             artwork = img[art_top:art_bottom, art_left:art_right]
@@ -551,6 +343,11 @@ def main():
     OUTPUT_DIR = 'output'
     MAX_PAGES = 50  # EX series has ~1000 cards; adjust based on cards per page (typically 20-30)
     
+    # Artwork extraction configuration
+    # Adjust this percentage to control where the bottom crop occurs
+    # 0.56 = 56% of card height, typically captures full artwork without text
+    ARTWORK_BOTTOM_RATIO = 0.56
+    
     logger.info("=" * 80)
     logger.info("Pokémon Card Scraper - Ex Series with Artwork Extraction")
     logger.info("=" * 80)
@@ -560,7 +357,8 @@ def main():
         scraper = PokemonCardScraper(
             base_url=BASE_URL, 
             output_dir=OUTPUT_DIR,
-            search_params=SEARCH_PARAMS
+            search_params=SEARCH_PARAMS,
+            artwork_bottom_ratio=ARTWORK_BOTTOM_RATIO
         )
         scraper.run(max_pages=MAX_PAGES)
         
