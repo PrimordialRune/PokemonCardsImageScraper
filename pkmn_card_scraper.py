@@ -118,9 +118,11 @@ class PokemonCardScraper:
         """
         try:
             # Construct URL with search parameters and pagination
-            url = f"{self.base_url}/?{self.search_params}&display=images"
-            if page_num > 1:
-                url += f"&page={page_num}"
+            # Format: https://pkmncards.com/page/2/?s=...&display=images
+            if page_num == 1:
+                url = f"{self.base_url}/?{self.search_params}&display=images"
+            else:
+                url = f"{self.base_url}/page/{page_num}/?{self.search_params}&display=images"
             
             logger.info(f"Scraping page {page_num}: {url}")
             response = self.session.get(url, timeout=self.timeout)
@@ -219,7 +221,7 @@ class PokemonCardScraper:
         
         # Histogram similarity threshold (0-1, lower = more different)
         # Using correlation: 1.0 = identical, 0.0 = uncorrelated, -1.0 = opposite
-        HISTOGRAM_SIMILARITY_THRESHOLD = 0.7  # Below this = significant color change
+        HISTOGRAM_SIMILARITY_THRESHOLD = 0.6  # Below this = significant color change (stricter)
         
         # Combined detection parameters
         # Both edge density AND histogram conditions must be met
@@ -415,9 +417,10 @@ class PokemonCardScraper:
             # Start scanning from a reasonable position in the artwork
             y_start = int(0.25 * height)  # Start scanning from 25% down (earlier to catch artwork properly)
             
-            # Maximum downward expansion: +12% of card height from initial y0
-            max_y_expansion = int(0.12 * height)
-            max_y = min(int(0.48 * height) + max_y_expansion, height - 10)  # Adjusted to stop before text box
+            # Maximum downward expansion: more conservative to avoid text
+            # Reduced from +12% to +8% to stop before text region
+            max_y_expansion = int(0.08 * height)
+            max_y = min(int(0.48 * height) + max_y_expansion, height - 10)  # Max ~56% to avoid text
             
             # Detect the bottom edge using combined edge density + histogram analysis
             art_bottom = self.detect_bottom_edge(gray, img, x0, x1, y_start, max_y)
