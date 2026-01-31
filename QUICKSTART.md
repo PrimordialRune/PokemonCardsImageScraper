@@ -58,14 +58,14 @@ The algorithm uses **combined frame boundary detection**:
 
 **Fixed Boundaries:**
 - **x0 = 7.5%** of width (left boundary)
-- **y0 = 13%** of height (top boundary)
+- **y0 = 9.5%** of height (top boundary)
 - **x1 = 92.5%** of width (right boundary)
 
 **Dynamic Bottom Boundary:**
 Uses two methods simultaneously to identify the card frame:
 
 1. **Edge Density Analysis**
-   - Scans downward from ~35% of card height
+   - Scans downward from ~25% of card height
    - Calculates edge density using Canny(50, 150) in 10-pixel windows
    - Finds peak edge density (artwork border)
    - Checks for sustained low edge density (<0.01)

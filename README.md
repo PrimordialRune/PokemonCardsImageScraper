@@ -70,13 +70,13 @@ The script uses a **hybrid deterministic approach** for artwork detection:
 
 1. **Fixed Boundaries** (ratio-based):
    - Left boundary: 7.5% from left edge (x0 = 0.075 * width)
-   - Top boundary: 13% from top edge (y0 = 0.13 * height)
+   - Top boundary: 9.5% from top edge (y0 = 0.095 * height)
    - Right boundary: 92.5% from left edge (x1 = 0.925 * width)
 
 2. **Dynamic Bottom Boundary Detection** (frame analysis):
    
    **Phase 1: Edge Density Analysis**
-   - Scans downward from ~35% of card height
+   - Scans downward from ~25% of card height
    - Calculates edge density in 10-pixel windows using Canny(50, 150)
    - Finds peak edge density (typically the artwork bottom border)
    
