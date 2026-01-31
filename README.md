@@ -107,17 +107,29 @@ This dual-method approach ensures reliable frame boundary detection by identifyi
 
 ## Output Structure
 
+Files are named using structured format: `{set_code}_{number}_{name}.png`
+
 ```
 output/
-├── cards/          # Full card images (original format)
-│   ├── card_00000.jpg
-│   ├── card_00001.jpg
+├── cards/          # Full card images (PNG format)
+│   ├── rs_1_aggron.png
+│   ├── rs_2_blaziken.png
+│   ├── rs_3_swampert.png
 │   └── ...
 └── art_only/       # Cropped artwork only (PNG format)
-    ├── card_00000.png
-    ├── card_00001.png
+    ├── rs_1_aggron_board.png
+    ├── rs_2_blaziken_board.png
+    ├── rs_3_swampert_board.png
     └── ...
 ```
+
+**Naming Convention:**
+- Full card: `{set}_{number}_{name}.png` (e.g., `rs_1_aggron.png`)
+- Cropped art: `{set}_{number}_{name}_board.png` (e.g., `rs_1_aggron_board.png`)
+
+The script automatically extracts metadata from card filenames and transforms them:
+- Input: `aggron-ruby-sapphire-rs-1_00001.jpg`
+- Output: `rs_1_aggron.png` + `rs_1_aggron_board.png`
 
 ## Logging
 
