@@ -3,6 +3,8 @@ output/
 cards/
 art_only/
 test_output/
+test_tmp/
+output_dimcheck/
 
 # Log files
 *.log
