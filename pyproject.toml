@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ptcg-art-scraper"
+version = "0.1.0"
+description = "Pokémon TCG card image scraper and normalizer"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = [
+    "typer>=0.9.0",
+    "httpx>=0.25.0",
+    "beautifulsoup4>=4.12.0",
+    "Pillow>=10.0.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+browser = ["playwright>=1.40.0"]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+]
+
+[project.scripts]
+ptcg_art_scraper = "ptcg_art_scraper.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "network: marks tests that require network access (deselect with '-m \"not network\"')",
+]

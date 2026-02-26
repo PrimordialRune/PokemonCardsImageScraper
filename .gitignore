@@ -5,6 +5,7 @@ art_only/
 test_output/
 test_tmp/
 output_dimcheck/
+normalized_out/
 
 # Log files
 *.log
@@ -15,6 +16,12 @@ __pycache__/
 *$py.class
 *.so
 .Python
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+.eggs/
 
 # Virtual environments
 venv/
@@ -32,3 +39,6 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Error reports
+errors.jsonl

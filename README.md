@@ -1,154 +1,158 @@
-# Pokémon Card Scraper with Artwork Extraction
+# Pokémon TCG Card Image Scraper
 
-A Python script that downloads Pokémon card images from pkmncards.com (specifically the **EX series**) and automatically extracts the artwork region using deterministic OpenCV image processing with **fixed percentage-based boundaries**.
+A CLI tool that scrapes Pokémon card images (from [pkmncards.com](https://pkmncards.com) and other providers) and produces **standardised, print-ready** images:
+
+* **750 × 1050 px** (2.5 × 3.5 in at 300 DPI)
+* Embedded 300 DPI metadata
+* Sidecar JSON with provenance, hashes, and sizing data
 
 ## Features
 
-- **EX Series Targeted Scraping**: Downloads cards from the EX series using `s=series%3Aex` parameter
-- **Paginated Scraping**: Handles pagination with `?display=images` parameter
-- **Simple Artwork Extraction**: Uses OpenCV with fixed ratio-based boundaries
-  - All boundaries are percentage-based for consistency across card sizes
-  - Top: 6.5%, Bottom: 56% (configurable), Left: 7.5%, Right: 94.5%
-  - Easy to adjust via `artwork_bottom_ratio` parameter
-- **Organized Storage**: Saves full cards to `cards/` folder and extracted artwork (PNG) to `art_only/` folder
-- **Deduplication**: Tracks downloaded URLs to prevent duplicate downloads
-- **Error Handling**: Comprehensive error handling with retry logic for network requests
-- **Logging**: Detailed logging to both console and file (`scraper.log`)
-- **Rate Limiting**: Built-in delays between requests to be respectful to the server
+* **Provider architecture** – pluggable providers (`pkmncards` today; add more later).
+* **Image normalization** – cover-fit → centre-crop → Lanczos resampling → DPI embed.
+* **Batch processing** – async downloads, bounded concurrency, token-bucket rate limiting.
+* **Retries with exponential back-off** on 429 / 5xx / timeouts.
+* **Resume support** – skip already-downloaded images by checking output + sidecar JSON.
+* **Verify command** – audit an output folder for size / DPI / corruption issues.
+* **Structured output** – `{set_slug}/{number}_{name_slug}.png` + `.json` sidecar.
 
 ## Installation
 
-1. Clone the repository:
 ```bash
-git clone https://github.com/PrimordialRune/pkmncardsPreviewScraper.git
-cd pkmncardsPreviewScraper
+# From repository root
+pip install -e ".[dev]"
 ```
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+Dependencies: Python ≥ 3.11, httpx, typer, beautifulsoup4, Pillow, rich.
 
 ## Usage
 
-Run the scraper with default settings (EX series, 50 pages):
+### Scrape cards
+
 ```bash
-python pkmn_card_scraper.py
+# Single card search
+ptcg_art_scraper scrape --out ./cards --query "Charizard ex 100/197"
+
+# From a text/CSV/JSON list
+ptcg_art_scraper scrape --out ./cards --input cards_to_fetch.csv --concurrency 6 --rate 1.5
+
+# Limit results
+ptcg_art_scraper scrape --out ./cards --query "Pikachu" --limit 5
 ```
 
-### Configuration
+### Normalize existing images
 
-You can modify the following settings in the `main()` function:
-
-- `BASE_URL`: The base URL of the website (default: 'https://pkmncards.com')
-- `SEARCH_PARAMS`: Query parameters for filtering (default: 's=series%3Aex&sort=date&ord=auto')
-- `OUTPUT_DIR`: Root directory for output files (default: 'output')
-- `MAX_PAGES`: Number of pages to scrape (default: 50 for EX series)
-- `ARTWORK_BOTTOM_RATIO`: Percentage for bottom crop boundary (default: 0.56 = 56%)
-
-### Custom Artwork Boundary
-
-You can easily adjust the bottom boundary percentage to match your needs:
-
-```python
-# More conservative (crops higher, excludes more)
-scraper = PokemonCardScraper(artwork_bottom_ratio=0.50)
-
-# Default (recommended for most EX cards)
-scraper = PokemonCardScraper(artwork_bottom_ratio=0.56)
-
-# More liberal (includes more, may include text)
-scraper = PokemonCardScraper(artwork_bottom_ratio=0.60)
+```bash
+ptcg_art_scraper normalize --input ./raw_images --out ./normalized
 ```
 
-### How It Works
+### Verify output
 
-1. **Scraping**: The script visits pkmncards.com with EX series filter (`s=series%3Aex&sort=date&ord=auto&display=images`) and extracts card image URLs from each page
-2. **Downloading**: Each card image is downloaded with retry logic (3 attempts with exponential backoff)
-3. **Deduplication**: URLs are tracked to prevent downloading the same card multiple times
-4. **Artwork Extraction**: For each card:
-   - Applies fixed percentage-based boundaries to all edges
-   - Left: 7.5%, Top: 6.5%, Right: 94.5%, Bottom: configurable (default 56%)
-   - Crops the artwork region and saves as PNG
-5. **Organization**: 
-   - Full cards are saved to `output/cards/` (original format)
-   - Extracted artwork is saved to `output/art_only/` (PNG format)
-
-### Artwork Detection Algorithm
-
-The script uses **fixed percentage-based boundaries** for artwork extraction:
-
-- **Left boundary**: 7.5% from left edge (x0 = 0.075 * width)
-- **Top boundary**: 6.5% from top edge (y0 = 0.065 * height)
-- **Right boundary**: 94.5% from left edge (x1 = 0.945 * width)
-- **Bottom boundary**: Configurable percentage (default: y1 = 0.56 * height)
-
-This provides consistent results across all card sizes while allowing easy customization via the `artwork_bottom_ratio` parameter.
-
-**Why Fixed Ratios?**
-- Simple and predictable
-- Fast (no image processing overhead)
-- Easy to adjust for different card layouts
-- Consistent results every time
-
-## Output Structure
-
-Files are named using the original filename from the website plus an index:
-
-```
-output/
-├── cards/          # Full card images (original format)
-│   ├── aggron-ruby-sapphire-rs-1_00001.jpg
-│   ├── blaziken-ruby-sapphire-rs-2_00002.jpg
-│   └── ...
-└── art_only/       # Cropped artwork only (PNG format)
-    ├── aggron-ruby-sapphire-rs-1_00001.png
-    ├── blaziken-ruby-sapphire-rs-2_00002.png
-    └── ...
+```bash
+ptcg_art_scraper verify --input ./normalized
 ```
 
-**Naming Convention:**
-- Full card: `{original-filename}_{index}.jpg`
-- Cropped art: `{original-filename}_{index}.png`
+Exit code is non-zero if any image fails (useful in CI).
 
-## Logging
+### Key options (`scrape`)
 
-The script logs all activities to:
-- Console (stdout)
-- `scraper.log` file
+| Option | Default | Description |
+|---|---|---|
+| `--provider` | `pkmncards` | Image provider |
+| `--out` | *(required)* | Output directory |
+| `--query` | | Search query |
+| `--input` | | File with card identifiers/URLs |
+| `--set` | | Set code/name filter |
+| `--limit` | 0 (all) | Max cards |
+| `--concurrency` | 8 | Parallel downloads |
+| `--rate` | 2.0 | Requests / second |
+| `--retries` | 3 | Retry count |
+| `--timeout` | 20 s | HTTP timeout |
+| `--resume` / `--no-resume` | resume | Skip existing |
+| `--format` | png | `png` or `jpg` |
+| `--overwrite` | false | Re-download existing |
 
-Log levels:
-- INFO: General progress and successful operations
-- DEBUG: Detailed extraction information
-- WARNING: Recoverable errors (e.g., failed download attempts)
-- ERROR: Unrecoverable errors (e.g., failed after all retries)
+## Output structure
 
-## Error Handling
+```
+cards/
+├── sv4/
+│   ├── 100_charizard-ex.png
+│   ├── 100_charizard-ex.json
+│   ├── 25_pikachu.png
+│   └── 25_pikachu.json
+└── errors.jsonl          # only if failures occurred
+```
 
-The script includes comprehensive error handling for:
-- Network timeouts and connection errors
-- Invalid or corrupted images
-- Image processing failures
-- File system errors
-- Duplicate URL prevention
+Each `.json` sidecar contains:
 
-All errors are logged with detailed information for debugging.
+```json
+{
+  "provider": "pkmncards",
+  "source_page_url": "https://pkmncards.com/card/…",
+  "source_image_url": "https://…/image.png",
+  "fetched_at_utc": "2025-01-01T00:00:00+00:00",
+  "normalized_size": [750, 1050],
+  "dpi": 300,
+  "original_size": [800, 1120],
+  "sha256_original": "abc…",
+  "sha256_normalized": "def…"
+}
+```
 
-## Dependencies
+## Development
 
-- `requests`: HTTP library for downloading images
-- `beautifulsoup4`: HTML parsing for scraping
-- `opencv-python`: Image processing for artwork extraction
-- `numpy`: Numerical operations (required by OpenCV)
+```bash
+pip install -e ".[dev]"
 
-## Notes
+# Lint
+ruff check src/ tests/
 
-- The script includes a 1-second delay between requests to be respectful to the server
-- Failed downloads are retried up to 3 times with exponential backoff
-- Image URLs are deduplicated automatically using a tracking set
-- The scraper will stop if it encounters a page with no images
-- Artwork is always saved as PNG format for quality preservation
-- Adjust `artwork_bottom_ratio` parameter (0.50-0.60) to fine-tune the bottom crop boundary
+# Type check
+mypy src/ptcg_art_scraper/
+
+# Tests (skip network tests)
+pytest -m "not network" -v
+```
+
+## Project structure
+
+```
+src/ptcg_art_scraper/
+├── cli.py                 # Typer CLI (scrape / normalize / verify)
+├── models.py              # CardRef, CardAsset, FetchedImage, etc.
+├── providers/
+│   ├── base.py            # Abstract provider interface
+│   └── pkmncards.py       # pkmncards.com provider
+├── image/
+│   └── normalize.py       # 750×1050 @ 300 DPI pipeline
+├── storage/
+│   ├── layout.py          # Output path / naming rules
+│   └── metadata.py        # Sidecar JSON persistence
+├── net/
+│   └── http.py            # Async HTTP client, retry, rate limiting
+└── utils/
+    └── slugify.py         # Filesystem-safe slug generation
+tests/
+├── test_cli.py            # CLI smoke tests
+├── test_normalize.py      # Image pipeline + DPI golden tests
+├── test_provider_pkmncards.py  # HTML parsing with fixtures
+└── test_slugify_paths.py  # Slug + output path rules
+```
+
+## Troubleshooting
+
+* **Blocked requests?** – Reduce `--rate` (e.g. `0.5`). The default (2 req/s) is conservative.
+* **HTML layout changed?** – Provider parsing may need updating; file an issue.
+* **Timeouts?** – Increase `--timeout` (e.g. `60`).
+
+## Legal / ethical note
+
+This tool is provided for personal, non-commercial use only. Users are responsible for complying with the terms of service of any website they scrape. Pokémon card images are © The Pokémon Company / Nintendo.
+
+## Legacy scraper
+
+The original `pkmn_card_scraper.py` (EX-series CV-based artwork extractor) is still available in the repository for reference.
 
 ## License
 
