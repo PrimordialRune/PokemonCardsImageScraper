@@ -82,7 +82,10 @@ def scrape(
     folder_template: Optional[str] = typer.Option(
         None,
         "--folder-template",
-        help="Output path template with tokens: {set}, {setId}, {number}, {name}, {basicType}, {specificType}, {rarity}, {fmt}.",
+        help=(
+            "Output path template with tokens: {set}, {setId}, {number},"
+            " {name}, {basicType}, {specificType}, {rarity}, {fmt}."
+        ),
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:

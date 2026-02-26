@@ -249,7 +249,11 @@ class LibraryPage(QWidget):
         dpi = meta.get("dpi")
         if dpi:
             info += f"\nDPI: {dpi}"
-        for key in ("name", "set", "setId", "number", "basicType", "specificType", "rarity", "color", "hp"):
+        meta_keys = (
+            "name", "set", "setId", "number",
+            "basicType", "specificType", "rarity", "color", "hp",
+        )
+        for key in meta_keys:
             val = meta.get(key)
             if val:
                 info += f"\n{key}: {val}"

@@ -60,7 +60,10 @@ _COL_SOURCE = 5
 _COL_OUTPUT = 6
 _COL_PROGRESS = 7
 _COL_MESSAGE = 8
-_COL_HEADERS = ["Status", "Card", "Set", "Type", "Rarity", "Source", "Output", "Progress", "Message"]
+_COL_HEADERS = [
+    "Status", "Card", "Set", "Type", "Rarity",
+    "Source", "Output", "Progress", "Message",
+]
 
 
 # ---------------------------------------------------------------------------
