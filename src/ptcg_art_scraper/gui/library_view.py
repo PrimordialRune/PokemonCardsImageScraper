@@ -58,6 +58,15 @@ class LibraryPage(QWidget):
         folder_row.addWidget(self._refresh_btn)
         root.addLayout(folder_row)
 
+        # --- Search row ---
+        search_row = QHBoxLayout()
+        search_row.addWidget(QLabel("Search:"))
+        self._search_edit = QLineEdit()
+        self._search_edit.setPlaceholderText("Filter by name, set…")
+        self._search_edit.textChanged.connect(self._apply_search)
+        search_row.addWidget(self._search_edit, stretch=1)
+        root.addLayout(search_row)
+
         # --- Splitter: tree + table ---
         splitter = QSplitter()
 
@@ -68,10 +77,11 @@ class LibraryPage(QWidget):
         splitter.addWidget(self._tree)
 
         # Right: file table
-        self._table = QTableWidget(0, 4)
+        self._table = QTableWidget(0, 6)
         self._table.setHorizontalHeaderLabels(
-            ["Filename", "Size", "Set", "Status"]
+            ["Filename", "Size", "Set", "Type", "Rarity", "Status"]
         )
+        self._table.setSortingEnabled(True)
         header = self._table.horizontalHeader()
         if header is not None:
             header.setSectionResizeMode(
@@ -190,13 +200,21 @@ class LibraryPage(QWidget):
                 row, 1, QTableWidgetItem(f"{size_kb:.1f} KB")
             )
             meta = self._load_sidecar(fp)
-            set_name = meta.get("set_name", fp.parent.name)
+            set_name = meta.get("set", meta.get("set_name", fp.parent.name))
+            basic_type = meta.get("basicType", "")
+            rarity = meta.get("rarity", "")
             status = "✅" if meta else "—"
             self._table.setItem(
                 row, 2, QTableWidgetItem(str(set_name))
             )
             self._table.setItem(
-                row, 3, QTableWidgetItem(status)
+                row, 3, QTableWidgetItem(str(basic_type))
+            )
+            self._table.setItem(
+                row, 4, QTableWidgetItem(str(rarity))
+            )
+            self._table.setItem(
+                row, 5, QTableWidgetItem(status)
             )
         self._detail_label.setText(
             f"{len(self._files)} image(s) in {folder.name}"
@@ -228,9 +246,38 @@ class LibraryPage(QWidget):
         info = f"Path: {fp}\nSize: {fp.stat().st_size / 1024:.1f} KB"
         if isinstance(dims, list) and len(dims) == 2:
             info += f"\nDimensions: {dims[0]}×{dims[1]}"
+        dpi = meta.get("dpi")
+        if dpi:
+            info += f"\nDPI: {dpi}"
+        for key in ("name", "set", "setId", "number", "basicType", "specificType", "rarity", "color", "hp"):
+            val = meta.get(key)
+            if val:
+                info += f"\n{key}: {val}"
+        source = meta.get("source_page_url")
+        if source:
+            info += f"\nSource: {source}"
         self._detail_label.setText(info)
         self._open_image_btn.setEnabled(True)
         self._open_folder_btn.setEnabled(True)
+
+    # ------------------------------------------------------------------
+    # Search / filter
+    # ------------------------------------------------------------------
+
+    def _apply_search(self) -> None:
+        """Show/hide table rows matching the search text."""
+        text = self._search_edit.text().strip().lower()
+        for row in range(self._table.rowCount()):
+            if not text:
+                self._table.setRowHidden(row, False)
+                continue
+            visible = False
+            for col in range(self._table.columnCount()):
+                item = self._table.item(row, col)
+                if item and text in item.text().lower():
+                    visible = True
+                    break
+            self._table.setRowHidden(row, not visible)
 
     # ------------------------------------------------------------------
     # Actions

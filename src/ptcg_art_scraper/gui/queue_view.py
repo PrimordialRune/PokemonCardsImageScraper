@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -52,11 +53,14 @@ _STATUS_ICONS: dict[ItemStatus, str] = {
 
 _COL_STATUS = 0
 _COL_CARD = 1
-_COL_SOURCE = 2
-_COL_OUTPUT = 3
-_COL_PROGRESS = 4
-_COL_MESSAGE = 5
-_COL_HEADERS = ["Status", "Card", "Source", "Output", "Progress", "Message"]
+_COL_SET = 2
+_COL_TYPE = 3
+_COL_RARITY = 4
+_COL_SOURCE = 5
+_COL_OUTPUT = 6
+_COL_PROGRESS = 7
+_COL_MESSAGE = 8
+_COL_HEADERS = ["Status", "Card", "Set", "Type", "Rarity", "Source", "Output", "Progress", "Message"]
 
 
 # ---------------------------------------------------------------------------
@@ -135,9 +139,31 @@ class QueuePage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
 
+        # --- Filter row ---
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("Search:"))
+        self._filter_edit = QLineEdit()
+        self._filter_edit.setPlaceholderText("Filter by name, set…")
+        self._filter_edit.textChanged.connect(self._apply_filter)
+        filter_layout.addWidget(self._filter_edit, stretch=1)
+
+        filter_layout.addWidget(QLabel("Type:"))
+        self._type_filter = QComboBox()
+        self._type_filter.addItems(["All", "Pokemon", "Trainer", "Energy"])
+        self._type_filter.currentTextChanged.connect(self._apply_filter)
+        filter_layout.addWidget(self._type_filter)
+
+        filter_layout.addWidget(QLabel("Rarity:"))
+        self._rarity_filter = QComboBox()
+        self._rarity_filter.addItems(["All"])
+        self._rarity_filter.currentTextChanged.connect(self._apply_filter)
+        filter_layout.addWidget(self._rarity_filter)
+        root.addLayout(filter_layout)
+
         # --- Queue table ---
         self._table = QTableWidget(0, len(_COL_HEADERS))
         self._table.setHorizontalHeaderLabels(_COL_HEADERS)
+        self._table.setSortingEnabled(True)
         header = self._table.horizontalHeader()
         if header is not None:
             header.setSectionResizeMode(
@@ -320,9 +346,17 @@ class QueuePage(QWidget):
             QTableWidgetItem(f"{icon} {item.status.value}"),
         )
         card_text = item.name or item.identifier
-        if item.set_name or item.number:
-            card_text += f" ({item.set_name} #{item.number})"
+        if item.number:
+            card_text += f" #{item.number}"
         self._table.setItem(row, _COL_CARD, QTableWidgetItem(card_text))
+        set_text = item.set_name or item.set_code or ""
+        self._table.setItem(row, _COL_SET, QTableWidgetItem(set_text))
+        type_parts = [item.basic_type, item.specific_type]
+        type_text = " / ".join(p for p in type_parts if p)
+        self._table.setItem(row, _COL_TYPE, QTableWidgetItem(type_text))
+        self._table.setItem(
+            row, _COL_RARITY, QTableWidgetItem(item.rarity)
+        )
         self._table.setItem(
             row, _COL_SOURCE, QTableWidgetItem(item.source_url)
         )
@@ -354,6 +388,25 @@ class QueuePage(QWidget):
         if elapsed > 0 and self._completed_count > 0:
             rate = self._completed_count / (elapsed / 60.0)
             self._throughput_label.setText(f"{rate:.1f} cards/min")
+
+    def _apply_filter(self) -> None:
+        """Show/hide table rows based on search text and filter combos."""
+        text = self._filter_edit.text().strip().lower()
+        type_filter = self._type_filter.currentText()
+        rarity_filter = self._rarity_filter.currentText()
+        for row, item in enumerate(self._items):
+            visible = True
+            if text:
+                haystack = f"{item.name} {item.set_name} {item.set_code}".lower()
+                if text not in haystack:
+                    visible = False
+            if visible and type_filter != "All":
+                if item.basic_type != type_filter:
+                    visible = False
+            if visible and rarity_filter != "All":
+                if item.rarity.lower() != rarity_filter.lower():
+                    visible = False
+            self._table.setRowHidden(row, not visible)
 
     # ------------------------------------------------------------------
     # Control slots

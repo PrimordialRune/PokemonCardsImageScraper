@@ -30,6 +30,17 @@ class CardAsset:
     source_page_url: str = ""
     image_url: str = ""
     provider: str = ""
+    basic_type: str = ""
+    specific_type: str = ""
+    evolves_from: str = ""
+    hp: int = 0
+    color: str = ""
+    attacks: list = field(default_factory=list)
+    abilities: list = field(default_factory=list)
+    traits: list = field(default_factory=list)
+    weaknesses: dict = field(default_factory=dict)
+    resistances: dict = field(default_factory=dict)
+    retreat_cost: int = 0
 
 
 @dataclass
@@ -73,7 +84,53 @@ class SidecarMetadata:
     original_size: list[int] = field(default_factory=list)
     sha256_original: str = ""
     sha256_normalized: str = ""
+    name: str = ""
+    set: str = ""
+    setId: str = ""
+    number: str = ""
+    basicType: str = ""
+    specificType: str = ""
+    evolvesFrom: str = ""
+    color: str = ""
+    rarity: str = ""
+    hp: int = 0
+    attacks: list = field(default_factory=list)
+    abilities: list = field(default_factory=list)
+    traits: list = field(default_factory=list)
+    weaknesses: dict = field(default_factory=dict)
+    resistances: dict = field(default_factory=dict)
+    retreatCost: int = 0
+    normalized_output_path: str = ""
+    warnings: list[str] = field(default_factory=list)
 
     @staticmethod
     def now_utc() -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    @classmethod
+    def from_asset(
+        cls, asset: "CardAsset", **kwargs: object
+    ) -> "SidecarMetadata":
+        """Build a sidecar from a :class:`CardAsset` plus extra fields."""
+        return cls(
+            provider=asset.provider,
+            source_page_url=asset.source_page_url,
+            source_image_url=asset.image_url,
+            name=asset.name,
+            set=asset.set_name,
+            setId=asset.set_code,
+            number=asset.number,
+            basicType=asset.basic_type,
+            specificType=asset.specific_type,
+            evolvesFrom=asset.evolves_from,
+            color=asset.color,
+            rarity=asset.rarity,
+            hp=asset.hp,
+            attacks=list(asset.attacks),
+            abilities=list(asset.abilities),
+            traits=list(asset.traits),
+            weaknesses=dict(asset.weaknesses),
+            resistances=dict(asset.resistances),
+            retreatCost=asset.retreat_cost,
+            **kwargs,  # type: ignore[arg-type]
+        )

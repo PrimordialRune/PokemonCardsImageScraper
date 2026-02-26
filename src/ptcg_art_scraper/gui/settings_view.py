@@ -58,6 +58,18 @@ class SettingsPage(QWidget):
         self._fmt_combo.addItems(["png", "jpeg"])
         form.addRow("Format:", self._fmt_combo)
 
+        # Folder template
+        self._template_edit = QLineEdit()
+        self._template_edit.setPlaceholderText(
+            "e.g. {setId}/{number}_{name}.{fmt} or {basicType}/{set}/{rarity}/{number}_{name}.{fmt}"
+        )
+        form.addRow("Folder template:", self._template_edit)
+        template_help = QLabel(
+            "Tokens: {set}, {setId}, {number}, {name}, {basicType}, {specificType}, {rarity}, {fmt}"
+        )
+        template_help.setStyleSheet("color: #888; font-size: 11px;")
+        form.addRow("", template_help)
+
         # Normalization (read-only)
         norm_label = QLabel("750 × 1050 @ 300 DPI")
         norm_label.setStyleSheet("color: #666;")
@@ -135,6 +147,9 @@ class SettingsPage(QWidget):
         )
         if fmt_idx >= 0:
             self._fmt_combo.setCurrentIndex(fmt_idx)
+        self._template_edit.setText(
+            str(s.value("folder_template", ""))
+        )
         self._conc_spin.setValue(
             int(s.value("concurrency", 8))  # type: ignore[arg-type]
         )
@@ -155,6 +170,9 @@ class SettingsPage(QWidget):
             "default_provider", self._provider_combo.currentText()
         )
         s.setValue("default_format", self._fmt_combo.currentText())
+        s.setValue(
+            "folder_template", self._template_edit.text().strip()
+        )
         s.setValue("concurrency", self._conc_spin.value())
         s.setValue("rate", self._rate_spin.value())
         s.setValue("retries", self._retries_spin.value())
@@ -165,6 +183,7 @@ class SettingsPage(QWidget):
         self._output_dir.clear()
         self._provider_combo.setCurrentIndex(0)
         self._fmt_combo.setCurrentIndex(0)
+        self._template_edit.clear()
         self._conc_spin.setValue(8)
         self._rate_spin.setValue(2.0)
         self._retries_spin.setValue(3)

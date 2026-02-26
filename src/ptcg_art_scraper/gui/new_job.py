@@ -258,6 +258,20 @@ class NewJobPage(QWidget):
         self._fmt_combo.currentTextChanged.connect(self._update_preview)
         out_layout.addRow("Format:", self._fmt_combo)
 
+        tmpl_row = QHBoxLayout()
+        self._template_edit = QLineEdit()
+        self._template_edit.setPlaceholderText(
+            "e.g. {setId}/{number}_{name}.{fmt}"
+        )
+        self._template_edit.textChanged.connect(self._update_preview)
+        tmpl_row.addWidget(self._template_edit, stretch=1)
+        out_layout.addRow("Folder template:", tmpl_row)
+        tmpl_help = QLabel(
+            "Tokens: {set}, {setId}, {number}, {name}, {basicType}, {specificType}, {rarity}, {fmt}"
+        )
+        tmpl_help.setStyleSheet("color: #888; font-size: 11px;")
+        out_layout.addRow("", tmpl_help)
+
         self._overwrite_cb = QCheckBox("Overwrite existing files")
         out_layout.addRow(self._overwrite_cb)
 
@@ -340,7 +354,15 @@ class NewJobPage(QWidget):
 
     def _update_preview(self) -> None:
         fmt = self._fmt_combo.currentText()
-        self._naming_preview.setText(f"…/SetName/001_CardName.{fmt}")
+        tmpl = self._template_edit.text().strip()
+        if tmpl:
+            preview = tmpl.replace("{set}", "SetName").replace("{setId}", "sv4")
+            preview = preview.replace("{number}", "001").replace("{name}", "CardName")
+            preview = preview.replace("{basicType}", "Pokemon").replace("{specificType}", "stage-1")
+            preview = preview.replace("{rarity}", "rare").replace("{fmt}", fmt)
+            self._naming_preview.setText(f"…/{preview}")
+        else:
+            self._naming_preview.setText(f"…/SetName/001_CardName.{fmt}")
 
     def _browse_import_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -415,6 +437,7 @@ class NewJobPage(QWidget):
             overwrite=self._overwrite_cb.isChecked(),
             set_filter=self._set_filter_edit.text().strip(),
             limit=0,
+            folder_template=self._template_edit.text().strip(),
         )
 
     def _build_queue(self) -> None:

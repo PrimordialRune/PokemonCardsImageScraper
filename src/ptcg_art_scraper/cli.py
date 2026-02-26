@@ -14,7 +14,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ptcg_art_scraper.image.normalize import normalize_image, verify_image
 from ptcg_art_scraper.models import SidecarMetadata
-from ptcg_art_scraper.storage.layout import card_output_path, sidecar_path
+from ptcg_art_scraper.storage.layout import card_output_path, sidecar_path, template_output_path
 from ptcg_art_scraper.storage.metadata import save_sidecar
 
 app = typer.Typer(name="ptcg_art_scraper", help="Pokémon TCG card image scraper & normalizer.")
@@ -79,6 +79,11 @@ def scrape(
     resume: bool = typer.Option(True, help="Skip already-downloaded items."),
     format: str = typer.Option("png", help="Output format: png or jpg."),
     overwrite: bool = typer.Option(False, help="Re-download and overwrite existing files."),
+    folder_template: Optional[str] = typer.Option(
+        None,
+        "--folder-template",
+        help="Output path template with tokens: {set}, {setId}, {number}, {name}, {basicType}, {specificType}, {rarity}, {fmt}.",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Scrape card images from a provider and save normalized images."""
@@ -115,6 +120,7 @@ def scrape(
             overwrite=overwrite,
             set_filter=card_set or "",
             limit=limit,
+            folder_template=folder_template or "",
         )
     )
 
@@ -133,6 +139,7 @@ async def _run_scrape(
     overwrite: bool,
     set_filter: str,
     limit: int,
+    folder_template: str = "",
 ) -> None:
     import httpx
 
@@ -168,7 +175,10 @@ async def _run_scrape(
             async with sem:
                 try:
                     asset = await prov.resolve(client, ref, rate_limiter=rl)
-                    dest = card_output_path(out, asset, fmt=fmt)
+                    if folder_template:
+                        dest = template_output_path(out, asset, fmt=fmt, template=folder_template)
+                    else:
+                        dest = card_output_path(out, asset, fmt=fmt)
                     json_dest = sidecar_path(dest)
 
                     if resume and not overwrite and dest.exists() and json_dest.exists():
@@ -178,16 +188,15 @@ async def _run_scrape(
                     fetched = await prov.fetch_image(client, asset, rate_limiter=rl)
                     meta_info = normalize_image(fetched.data, dest, fmt=fmt)
 
-                    sidecar = SidecarMetadata(
-                        provider=prov.name,
-                        source_page_url=asset.source_page_url,
-                        source_image_url=asset.image_url,
+                    sidecar = SidecarMetadata.from_asset(
+                        asset,
                         fetched_at_utc=SidecarMetadata.now_utc(),
                         normalized_size=[meta_info["width"], meta_info["height"]],
                         dpi=meta_info["dpi"],
                         original_size=[meta_info["original_width"], meta_info["original_height"]],
                         sha256_original=meta_info["sha256_original"],
                         sha256_normalized=meta_info["sha256_normalized"],
+                        normalized_output_path=str(dest),
                     )
                     save_sidecar(sidecar, json_dest)
                     succeeded += 1
