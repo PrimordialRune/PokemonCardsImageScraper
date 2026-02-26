@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QSettings, QThread, Signal
+from PySide6.QtCore import QSettings, Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -276,7 +276,7 @@ class NewJobPage(QWidget):
         # Concurrency slider
         conc_row = QHBoxLayout()
         self._conc_slider = QSlider()
-        self._conc_slider.setOrientation(1)  # Horizontal
+        self._conc_slider.setOrientation(Qt.Orientation.Horizontal)
         self._conc_slider.setRange(1, 16)
         self._conc_slider.setValue(8)
         self._conc_label = QLabel("8")
@@ -290,7 +290,7 @@ class NewJobPage(QWidget):
         # Rate-limit slider (stored as int × 10 for 0.5 step)
         rate_row = QHBoxLayout()
         self._rate_slider = QSlider()
-        self._rate_slider.setOrientation(1)
+        self._rate_slider.setOrientation(Qt.Orientation.Horizontal)
         self._rate_slider.setRange(5, 100)
         self._rate_slider.setValue(20)
         self._rate_label = QLabel("2.0 req/s")

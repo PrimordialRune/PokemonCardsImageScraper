@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -142,7 +142,7 @@ class LibraryPage(QWidget):
         root_item = QTreeWidgetItem(
             self._tree, [self._root_path.name]
         )
-        root_item.setData(0, 256, str(self._root_path))
+        root_item.setData(0, Qt.ItemDataRole.UserRole, str(self._root_path))
         self._add_subdirs(root_item, self._root_path, depth=0)
         self._tree.expandAll()
 
@@ -162,11 +162,11 @@ class LibraryPage(QWidget):
             return
         for d in dirs:
             child = QTreeWidgetItem(parent, [d.name])
-            child.setData(0, 256, str(d))
+            child.setData(0, Qt.ItemDataRole.UserRole, str(d))
             self._add_subdirs(child, d, depth + 1)
 
     def _on_tree_click(self, item: QTreeWidgetItem, _col: int) -> None:
-        path_str = item.data(0, 256)
+        path_str = item.data(0, Qt.ItemDataRole.UserRole)
         if path_str:
             self._load_folder(Path(str(path_str)))
 
