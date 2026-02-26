@@ -62,6 +62,7 @@ class JobConfig:
     overwrite: bool = False
     set_filter: str = ""
     limit: int = 0
+    folder_template: str = ""
 
 
 @dataclass
@@ -82,6 +83,10 @@ class QueueItem:
     retries_left: int = 3
     provider: str = ""
     selected: bool = True
+    basic_type: str = ""
+    specific_type: str = ""
+    rarity: str = ""
+    set_code: str = ""
 
 
 @dataclass

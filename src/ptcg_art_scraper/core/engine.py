@@ -25,7 +25,7 @@ from ptcg_art_scraper.core.models import (
 from ptcg_art_scraper.image.normalize import normalize_image
 from ptcg_art_scraper.models import CardRef, SidecarMetadata
 from ptcg_art_scraper.net.http import RateLimiter
-from ptcg_art_scraper.storage.layout import card_output_path, sidecar_path
+from ptcg_art_scraper.storage.layout import card_output_path, sidecar_path, template_output_path
 from ptcg_art_scraper.storage.metadata import save_sidecar
 
 logger = logging.getLogger(__name__)
@@ -181,8 +181,17 @@ class ScrapeEngine:
                 item.number = asset.number or item.number
                 item.image_url = asset.image_url
                 item.source_url = asset.source_page_url or item.identifier
+                item.basic_type = asset.basic_type
+                item.specific_type = asset.specific_type
+                item.rarity = asset.rarity
+                item.set_code = asset.set_code
 
-                dest = card_output_path(out, asset, fmt=fmt)
+                if self.config.folder_template:
+                    dest = template_output_path(
+                        out, asset, fmt=fmt, template=self.config.folder_template
+                    )
+                else:
+                    dest = card_output_path(out, asset, fmt=fmt)
                 json_dest = sidecar_path(dest)
                 item.output_path = str(dest)
 
@@ -229,16 +238,15 @@ class ScrapeEngine:
                 )
                 meta_info = normalize_image(fetched.data, dest, fmt=fmt)
 
-                sidecar = SidecarMetadata(
-                    provider=prov.name,
-                    source_page_url=asset.source_page_url,
-                    source_image_url=asset.image_url,
+                sidecar = SidecarMetadata.from_asset(
+                    asset,
                     fetched_at_utc=SidecarMetadata.now_utc(),
                     normalized_size=[meta_info["width"], meta_info["height"]],
                     dpi=meta_info["dpi"],
                     original_size=[meta_info["original_width"], meta_info["original_height"]],
                     sha256_original=meta_info["sha256_original"],
                     sha256_normalized=meta_info["sha256_normalized"],
+                    normalized_output_path=str(dest),
                 )
                 save_sidecar(sidecar, json_dest)
 
