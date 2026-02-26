@@ -9,7 +9,7 @@ from urllib.parse import quote_plus
 import httpx
 from bs4 import BeautifulSoup, Tag
 
-from ptcg_art_scraper.models import CardAsset, CardRef, FetchedImage
+from ptcg_art_scraper.models import CardAsset, CardAssetStub, CardRef, FetchedImage, SetRef
 from ptcg_art_scraper.net.http import RateLimiter, fetch_bytes, fetch_text
 from ptcg_art_scraper.providers.base import BaseProvider
 
@@ -209,6 +209,59 @@ def parse_card_page(html: str, page_url: str = "") -> CardAsset:
     )
 
 
+def _parse_set_list(html: str) -> list[SetRef]:
+    """Extract set references from a pkmncards.com sets page."""
+    soup = BeautifulSoup(html, "html.parser")
+    sets: list[SetRef] = []
+    # Try common set-list structures on pkmncards.com
+    for a_tag in soup.select("a[href*='/set/']"):
+        href = str(a_tag.get("href", ""))
+        name = a_tag.get_text(strip=True)
+        if not href or not name:
+            continue
+        parts = [p for p in href.rstrip("/").split("/") if p]
+        set_slug = parts[-1] if parts else ""
+        if set_slug:
+            sets.append(SetRef(id=set_slug, name=name))
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    deduped: list[SetRef] = []
+    for s in sets:
+        if s.id not in seen:
+            seen.add(s.id)
+            deduped.append(s)
+    return deduped
+
+
+def _parse_set_card_list(html: str, set_id: str) -> list[CardAssetStub]:
+    """Extract card stubs from a pkmncards.com set listing page."""
+    stubs: list[CardAssetStub] = []
+
+    # Cards appear as links with card images or in entry lists
+    urls = _parse_search_results(html)
+    for card_url in urls:
+        # Try to extract number and name from URL slug
+        slug_parts = [p for p in card_url.rstrip("/").split("/") if p]
+        slug = slug_parts[-1] if slug_parts else ""
+        # Attempt to parse number from the slug (e.g. "charizard-ex-sv4-100")
+        number = ""
+        name = slug
+        m = re.search(r"-(\d+)$", slug)
+        if m:
+            number = m.group(1)
+            name = slug[: m.start()]
+        stubs.append(
+            CardAssetStub(
+                provider="pkmncards",
+                set_id=set_id,
+                number=number,
+                name=name,
+                url=card_url,
+            )
+        )
+    return stubs
+
+
 class PkmnCardsProvider(BaseProvider):
     """Scraper for pkmncards.com."""
 
@@ -262,3 +315,33 @@ class PkmnCardsProvider(BaseProvider):
         ext = asset.image_url.rsplit(".", 1)[-1].lower()
         mime = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
         return FetchedImage(data=data, mime_type=mime, source_url=asset.image_url)
+
+    # -- Set completion capabilities ----------------------------------------
+
+    supports_set_completion = True
+
+    async def list_sets(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        rate_limiter: RateLimiter | None = None,
+    ) -> list[SetRef]:
+        html = await fetch_text(
+            client, f"{BASE_URL}/sets/", rate_limiter=rate_limiter
+        )
+        return _parse_set_list(html)
+
+    async def get_set_cards(
+        self,
+        client: httpx.AsyncClient,
+        set_id: str,
+        *,
+        rate_limiter: RateLimiter | None = None,
+    ) -> list[CardAssetStub]:
+        stubs: list[CardAssetStub] = []
+        page_url: str | None = f"{BASE_URL}/set/{quote_plus(set_id)}/"
+        while page_url:
+            html = await fetch_text(client, page_url, rate_limiter=rate_limiter)
+            stubs.extend(_parse_set_card_list(html, set_id))
+            page_url = _next_page_url(html)
+        return stubs
