@@ -24,7 +24,7 @@ from ptcg_art_scraper.core.models import (
 )
 from ptcg_art_scraper.image.normalize import normalize_image
 from ptcg_art_scraper.models import CardRef, SidecarMetadata
-from ptcg_art_scraper.net.http import RateLimiter
+from ptcg_art_scraper.net.http import DEFAULT_HEADERS, RateLimiter
 from ptcg_art_scraper.storage.layout import card_output_path, sidecar_path, template_output_path
 from ptcg_art_scraper.storage.metadata import save_sidecar
 
@@ -106,7 +106,9 @@ class ScrapeEngine:
         fmt = self.config.fmt
 
         async with httpx.AsyncClient(
-            timeout=self.config.timeout, follow_redirects=True
+            timeout=self.config.timeout,
+            follow_redirects=True,
+            headers=DEFAULT_HEADERS,
         ) as client:
             tasks = []
             for item in self.items:
@@ -286,7 +288,11 @@ async def resolve_search(
     """Search a provider and return :class:`QueueItem` objects for preview."""
     prov = _get_provider(provider_name)
     rl = RateLimiter(rate)
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+    async with httpx.AsyncClient(
+        timeout=timeout,
+        follow_redirects=True,
+        headers=DEFAULT_HEADERS,
+    ) as client:
         refs = await prov.search(
             client, query, set_filter=set_filter, limit=limit, rate_limiter=rl
         )

@@ -147,7 +147,7 @@ async def _run_scrape(
     import httpx
 
     from ptcg_art_scraper.models import CardRef
-    from ptcg_art_scraper.net.http import RateLimiter
+    from ptcg_art_scraper.net.http import DEFAULT_HEADERS, RateLimiter
 
     rl = RateLimiter(rate)
     sem = asyncio.Semaphore(concurrency)
@@ -156,7 +156,11 @@ async def _run_scrape(
     skipped = 0
     failed = 0
 
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+    async with httpx.AsyncClient(
+        timeout=timeout,
+        follow_redirects=True,
+        headers=DEFAULT_HEADERS,
+    ) as client:
         # 1. Resolve identifiers → CardRefs
         all_refs: list[CardRef] = []
         for ident in identifiers:

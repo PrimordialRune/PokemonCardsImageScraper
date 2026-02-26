@@ -14,6 +14,13 @@ DEFAULT_TIMEOUT = 20.0
 DEFAULT_RETRIES = 3
 DEFAULT_CONCURRENCY = 8
 DEFAULT_RATE = 2.0  # requests per second
+DEFAULT_HEADERS = {
+    "User-Agent": (
+        "ptcg-art-scraper/1.0 "
+        "(https://github.com/pokemon-tcg/ptcg-art-scraper)"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
 # Transient HTTP status codes that deserve a retry.
 _TRANSIENT = {408, 429, 500, 502, 503, 504}
@@ -61,10 +68,19 @@ async def fetch_bytes(
         except (httpx.HTTPStatusError, httpx.TransportError) as exc:
             last_exc = exc
             delay = (2**attempt) + random.uniform(0, 1)
-            logger.warning("Attempt %d/%d for %s failed: %s – retrying in %.1fs",
-                           attempt, retries, url, exc, delay)
+            logger.warning(
+                "Attempt %d/%d for %s failed: %s - retrying in %.1fs",
+                attempt,
+                retries,
+                url,
+                exc,
+                delay,
+            )
             await asyncio.sleep(delay)
-    raise RuntimeError(f"All {retries} attempts for {url} failed") from last_exc
+    detail = f": {last_exc}" if last_exc is not None else ""
+    raise RuntimeError(
+        f"All {retries} attempts for {url} failed{detail}"
+    ) from last_exc
 
 
 async def fetch_text(

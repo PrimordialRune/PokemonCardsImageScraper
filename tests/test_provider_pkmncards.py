@@ -66,6 +66,18 @@ class TestNextPageUrl:
         assert url is not None
         assert "page=2" in url
 
+    def test_finds_rel_next_link_and_normalizes(self):
+        html = """\
+        <html><head>
+        <link rel="next" href="/page/2/?s=charizard&display=full#content" />
+        </head><body></body></html>
+        """
+        url = _next_page_url(
+            html,
+            current_url="https://pkmncards.com/?s=charizard&display=full",
+        )
+        assert url == "https://pkmncards.com/page/2/?s=charizard&display=full"
+
     def test_no_next(self):
         assert _next_page_url("<html><body></body></html>") is None
 

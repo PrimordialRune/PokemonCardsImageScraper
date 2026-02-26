@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin, urlsplit, urlunsplit
 
 import httpx
 from bs4 import BeautifulSoup, Tag
@@ -35,12 +35,32 @@ def _parse_search_results(html: str) -> list[str]:
     return urls
 
 
-def _next_page_url(html: str) -> str | None:
+def _normalize_url(url: str, *, base_url: str = BASE_URL) -> str:
+    """Return an absolute URL without fragment."""
+    abs_url = urljoin(base_url, url)
+    parsed = urlsplit(abs_url)
+    return urlunsplit(
+        (parsed.scheme, parsed.netloc, parsed.path, parsed.query, "")
+    )
+
+
+def _next_page_url(html: str, *, current_url: str = "") -> str | None:
     """Return the next-page URL from pagination, or *None*."""
     soup = BeautifulSoup(html, "html.parser")
-    nxt = soup.select_one("a.next.page-numbers")
-    if nxt:
-        return str(nxt["href"])
+    selectors = (
+        "a.next.page-numbers",
+        "a.nextpostslink",
+        ".nav-links a.next",
+        "a[rel='next']",
+        "link[rel='next']",
+    )
+    for selector in selectors:
+        nxt = soup.select_one(selector)
+        if nxt is None:
+            continue
+        href = nxt.get("href")
+        if href:
+            return _normalize_url(str(href), base_url=current_url or BASE_URL)
     return None
 
 
@@ -224,19 +244,30 @@ class PkmnCardsProvider(BaseProvider):
         rate_limiter: RateLimiter | None = None,
     ) -> list[CardRef]:
         refs: list[CardRef] = []
+        seen_refs: set[str] = set()
+        seen_pages: set[str] = set()
         search_url = f"{BASE_URL}/?s={quote_plus(query)}&display=full"
         if set_filter:
             search_url += f"&set={quote_plus(set_filter)}"
 
         page_url: str | None = search_url
         while page_url:
-            html = await fetch_text(client, page_url, rate_limiter=rate_limiter)
+            normalized_page = _normalize_url(page_url)
+            if normalized_page in seen_pages:
+                break
+            seen_pages.add(normalized_page)
+
+            html = await fetch_text(client, normalized_page, rate_limiter=rate_limiter)
             card_urls = _parse_search_results(html)
             for u in card_urls:
-                refs.append(CardRef(provider=self.name, url=u))
+                normalized_ref = _normalize_url(u, base_url=normalized_page)
+                if normalized_ref in seen_refs:
+                    continue
+                seen_refs.add(normalized_ref)
+                refs.append(CardRef(provider=self.name, url=normalized_ref))
                 if 0 < limit <= len(refs):
                     return refs
-            page_url = _next_page_url(html)
+            page_url = _next_page_url(html, current_url=normalized_page)
         return refs
 
     async def resolve(

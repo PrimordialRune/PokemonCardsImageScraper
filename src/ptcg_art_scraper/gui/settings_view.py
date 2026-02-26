@@ -104,10 +104,7 @@ class SettingsPage(QWidget):
         # Buttons
         btn_row = QHBoxLayout()
         self._save_btn = QPushButton("Save")
-        self._save_btn.setStyleSheet(
-            "QPushButton { background-color: #27ae60; color: white; "
-            "padding: 8px 20px; font-weight: bold; border-radius: 4px; }"
-        )
+        self._save_btn.setProperty("role", "primary")
         self._save_btn.clicked.connect(self._save)
         btn_row.addWidget(self._save_btn)
 

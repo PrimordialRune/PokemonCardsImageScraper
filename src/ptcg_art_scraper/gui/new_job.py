@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import json
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -145,6 +146,146 @@ def _parse_import_file(path: str, provider: str) -> list[QueueItem]:
     return items
 
 
+_SERIES_PRESETS: list[tuple[str, str]] = [
+    ("Any series", ""),
+    ("EX era (2003-2007)", "ex"),
+    ("Diamond & Pearl", "diamond-pearl"),
+    ("Platinum", "platinum"),
+    ("HeartGold & SoulSilver", "heartgold-soulsilver"),
+    ("Black & White", "black-white"),
+    ("XY", "xy"),
+    ("Sun & Moon", "sun-moon"),
+    ("Sword & Shield", "sword-shield"),
+    ("Scarlet & Violet", "scarlet-violet"),
+]
+
+_TYPE_OPTIONS: list[tuple[str, str]] = [
+    ("Any type", ""),
+    ("Pokemon", "pokemon"),
+    ("Basic Pokemon", "basic-pokemon"),
+    ("Trainer", "trainer"),
+    ("Supporter", "supporter"),
+    ("Item", "item"),
+    ("Stadium", "stadium"),
+    ("Pokemon Tool", "pokemon-tool"),
+    ("Energy", "energy"),
+    ("Special Energy", "special-energy"),
+]
+
+_COLOR_OPTIONS: list[tuple[str, str]] = [
+    ("Any color", ""),
+    ("Grass", "grass"),
+    ("Fire", "fire"),
+    ("Water", "water"),
+    ("Lightning", "lightning"),
+    ("Psychic", "psychic"),
+    ("Fighting", "fighting"),
+    ("Darkness", "darkness"),
+    ("Metal", "metal"),
+    ("Dragon", "dragon"),
+    ("Fairy", "fairy"),
+    ("Colorless", "colorless"),
+]
+
+_STAGE_OPTIONS: list[tuple[str, str]] = [
+    ("Any stage", ""),
+    ("Basic", "basic"),
+    ("Stage 1", "stage-1"),
+    ("Stage 2", "stage-2"),
+    ("VMAX", "vmax"),
+    ("VSTAR", "vstar"),
+    ("LEGEND", "legend"),
+    ("BREAK", "break"),
+    ("Restored", "restored"),
+]
+
+_RARITY_OPTIONS: list[tuple[str, str]] = [
+    ("Any rarity", ""),
+    ("Common", "common"),
+    ("Uncommon", "uncommon"),
+    ("Rare", "rare"),
+    ("Rare Holo", "rare-holo"),
+    ("Rare Holo EX", "rare-holo-ex"),
+    ("Rare Holo GX", "rare-holo-gx"),
+    ("Rare Holo LV.X", "rare-holo-lv-x"),
+    ("Rare Holo Star", "rare-holo-star"),
+    ("Rare Prime", "rare-prime"),
+    ("Rare Prism Star", "rare-prism-star"),
+    ("Rare ACE", "rare-ace"),
+    ("Rare BREAK", "rare-break"),
+    ("Rare Rainbow", "rare-rainbow"),
+    ("Rare Secret", "rare-secret"),
+    ("Rare Ultra", "rare-ultra"),
+    ("Illustration Rare", "illustration-rare"),
+    ("Special Illustration Rare", "special-illustration-rare"),
+    ("Promo", "promo"),
+]
+
+_COLLECTION_OPTIONS: list[tuple[str, str]] = [
+    ("Any collection", ""),
+    ("Shiny Vault", "shiny-vault"),
+]
+
+_FORMAT_OPTIONS: list[tuple[str, str]] = [
+    ("Any format", ""),
+    ("Standard", "standard"),
+    ("Expanded", "expanded"),
+    ("Unlimited", "unlimited"),
+]
+
+_MARK_OPTIONS: list[tuple[str, str]] = [
+    ("Any mark", ""),
+    ("D", "d"),
+    ("E", "e"),
+    ("F", "f"),
+    ("G", "g"),
+    ("H", "h"),
+    ("I", "i"),
+]
+
+_HAS_OPTIONS: list[tuple[str, str]] = [
+    ("Any has-value", ""),
+    ("Ability", "ability"),
+    ("Ancient Trait", "ancient-trait"),
+    ("Poke-Body", "poke-body"),
+    ("Poke-Power", "poke-power"),
+    ("Pokemon Power", "pokemon-power"),
+    ("Rule Box", "rule-box"),
+]
+
+_IS_OPTIONS: list[tuple[str, str]] = [
+    ("Any is-value", ""),
+    ("ex", "ex"),
+    ("GX", "gx"),
+    ("V", "v"),
+    ("VMAX", "vmax"),
+    ("VSTAR", "vstar"),
+    ("TAG TEAM", "tag-team"),
+    ("Delta Species", "delta-species"),
+    ("Radiant", "radiant"),
+    ("Prime", "prime"),
+    ("LEGEND", "legend"),
+    ("Baby Pokemon", "baby"),
+]
+
+_PRINT_TYPE_OPTIONS: list[tuple[str, str]] = [
+    ("Any print type", ""),
+    ("Holo", "holo"),
+    ("Reverse Holo", "reverse-holo"),
+    ("Non Holo", "non-holo"),
+    ("Full Art", "full-art"),
+    ("Secret", "secret"),
+]
+
+_NUMERIC_OPERATORS: list[tuple[str, str]] = [
+    ("=", "="),
+    (">=", ">="),
+    ("<=", "<="),
+    (">", ">"),
+    ("<", "<"),
+]
+
+
 # ---------------------------------------------------------------------------
 # New-job page widget
 # ---------------------------------------------------------------------------
@@ -186,12 +327,253 @@ class NewJobPage(QWidget):
         # Search tab
         search_tab = QWidget()
         sl = QVBoxLayout(search_tab)
+
+        self._guided_mode_cb = QCheckBox("Use guided filters (recommended)")
+        self._guided_mode_cb.setChecked(True)
+        self._guided_mode_cb.toggled.connect(self._sync_search_mode)
+        sl.addWidget(self._guided_mode_cb)
+
+        sl.addWidget(QLabel("Manual query syntax:"))
         self._search_query = QLineEdit()
-        self._search_query.setPlaceholderText("e.g. Charizard")
-        sl.addWidget(QLabel("Search query:"))
+        self._search_query.setPlaceholderText(
+            'e.g. Charizard, series:ex, rarity:"Rare Holo"'
+        )
         sl.addWidget(self._search_query)
+
+        syntax_help = QLabel(
+            '<a href="https://pkmncards.com/advanced/">'
+            "Query syntax reference (pkmncards advanced search)"
+            "</a>"
+        )
+        syntax_help.setOpenExternalLinks(True)
+        sl.addWidget(syntax_help)
+
+        self._guided_group = QGroupBox("Guided filters")
+        guided_layout = QFormLayout(self._guided_group)
+
+        self._guided_name_edit = QLineEdit()
+        self._guided_name_edit.setPlaceholderText("e.g. Charizard ex 100/197")
+        self._guided_name_edit.textChanged.connect(
+            self._update_guided_query_preview
+        )
+        guided_layout.addRow("Card Name, Set, or #:", self._guided_name_edit)
+
+        self._guided_text_edit = QLineEdit()
+        self._guided_text_edit.setPlaceholderText(
+            "Search card text (uses text: token)"
+        )
+        self._guided_text_edit.textChanged.connect(
+            self._update_guided_query_preview
+        )
+        guided_layout.addRow("Card Text:", self._guided_text_edit)
+
+        text_opts = QWidget()
+        text_opts_layout = QHBoxLayout(text_opts)
+        text_opts_layout.setContentsMargins(0, 0, 0, 0)
+        self._guided_text_exact_cb = QCheckBox("Match exact phrase")
+        self._guided_text_exact_cb.toggled.connect(
+            self._update_guided_query_preview
+        )
+        text_opts_layout.addWidget(self._guided_text_exact_cb)
+        self._guided_exclude_edit = QLineEdit()
+        self._guided_exclude_edit.setPlaceholderText(
+            "Exclude words (space separated)"
+        )
+        self._guided_exclude_edit.textChanged.connect(
+            self._update_guided_query_preview
+        )
+        text_opts_layout.addWidget(self._guided_exclude_edit, stretch=1)
+        guided_layout.addRow("", text_opts)
+
+        self._guided_set_edit = QLineEdit()
+        self._guided_set_edit.setPlaceholderText("e.g. ex-unseen-forces")
+        self._guided_set_edit.textChanged.connect(
+            self._update_guided_query_preview
+        )
+        guided_layout.addRow("Set:", self._guided_set_edit)
+
+        self._guided_series_combo = QComboBox()
+        for label, value in _SERIES_PRESETS:
+            self._guided_series_combo.addItem(label, value)
+        self._guided_series_combo.currentIndexChanged.connect(
+            lambda _idx: self._update_guided_query_preview()
+        )
+        guided_layout.addRow("Series:", self._guided_series_combo)
+
+        self._guided_collection_combo = QComboBox()
+        for label, value in _COLLECTION_OPTIONS:
+            self._guided_collection_combo.addItem(label, value)
+        self._guided_collection_combo.currentIndexChanged.connect(
+            lambda _idx: self._update_guided_query_preview()
+        )
+        guided_layout.addRow("Collection:", self._guided_collection_combo)
+
+        self._guided_artist_edit = QLineEdit()
+        self._guided_artist_edit.setPlaceholderText("e.g. Ken Sugimori")
+        self._guided_artist_edit.textChanged.connect(
+            self._update_guided_query_preview
+        )
+        guided_layout.addRow("Artist:", self._guided_artist_edit)
+
+        self._guided_rarity_combo = QComboBox()
+        self._guided_rarity_combo.setEditable(True)
+        for label, value in _RARITY_OPTIONS:
+            self._guided_rarity_combo.addItem(label, value)
+        self._guided_rarity_combo.currentTextChanged.connect(
+            self._update_guided_query_preview
+        )
+        guided_layout.addRow("Rarity:", self._guided_rarity_combo)
+
+        self._guided_type_combo = QComboBox()
+        for label, value in _TYPE_OPTIONS:
+            self._guided_type_combo.addItem(label, value)
+        self._guided_type_combo.currentIndexChanged.connect(
+            lambda _idx: self._update_guided_query_preview()
+        )
+        guided_layout.addRow("Card Type:", self._guided_type_combo)
+
+        self._guided_color_combo = QComboBox()
+        for label, value in _COLOR_OPTIONS:
+            self._guided_color_combo.addItem(label, value)
+        self._guided_color_combo.currentIndexChanged.connect(
+            lambda _idx: self._update_guided_query_preview()
+        )
+        guided_layout.addRow("Color:", self._guided_color_combo)
+
+        self._guided_stage_combo = QComboBox()
+        for label, value in _STAGE_OPTIONS:
+            self._guided_stage_combo.addItem(label, value)
+        self._guided_stage_combo.currentIndexChanged.connect(
+            lambda _idx: self._update_guided_query_preview()
+        )
+        guided_layout.addRow("Stage:", self._guided_stage_combo)
+
+        hp_wrap = QWidget()
+        hp_row = QHBoxLayout(hp_wrap)
+        hp_row.setContentsMargins(0, 0, 0, 0)
+        self._guided_hp_op_combo = QComboBox()
+        for label, value in _NUMERIC_OPERATORS:
+            self._guided_hp_op_combo.addItem(label, value)
+        self._guided_hp_op_combo.currentIndexChanged.connect(
+            lambda _idx: self._update_guided_query_preview()
+        )
+        hp_row.addWidget(self._guided_hp_op_combo)
+        self._guided_hp_value_edit = QLineEdit()
+        self._guided_hp_value_edit.setPlaceholderText("e.g. 120")
+        self._guided_hp_value_edit.textChanged.connect(
+            self._update_guided_query_preview
+        )
+        hp_row.addWidget(self._guided_hp_value_edit, stretch=1)
+        guided_layout.addRow("HP:", hp_wrap)
+
+        self._guided_weak_combo = QComboBox()
+        for label, value in _COLOR_OPTIONS:
+            self._guided_weak_combo.addItem(label, value)
+        self._guided_weak_combo.currentIndexChanged.connect(
+            lambda _idx: self._update_guided_query_preview()
+        )
+        guided_layout.addRow("Weakness:", self._guided_weak_combo)
+
+        self._guided_resist_combo = QComboBox()
+        for label, value in _COLOR_OPTIONS:
+            self._guided_resist_combo.addItem(label, value)
+        self._guided_resist_combo.currentIndexChanged.connect(
+            lambda _idx: self._update_guided_query_preview()
+        )
+        guided_layout.addRow("Resistance:", self._guided_resist_combo)
+
+        retreat_wrap = QWidget()
+        retreat_row = QHBoxLayout(retreat_wrap)
+        retreat_row.setContentsMargins(0, 0, 0, 0)
+        self._guided_retreat_op_combo = QComboBox()
+        for label, value in _NUMERIC_OPERATORS:
+            self._guided_retreat_op_combo.addItem(label, value)
+        self._guided_retreat_op_combo.currentIndexChanged.connect(
+            lambda _idx: self._update_guided_query_preview()
+        )
+        retreat_row.addWidget(self._guided_retreat_op_combo)
+        self._guided_retreat_value_edit = QLineEdit()
+        self._guided_retreat_value_edit.setPlaceholderText("e.g. 2")
+        self._guided_retreat_value_edit.textChanged.connect(
+            self._update_guided_query_preview
+        )
+        retreat_row.addWidget(self._guided_retreat_value_edit, stretch=1)
+        guided_layout.addRow("Retreat Cost:", retreat_wrap)
+
+        self._guided_is_combo = QComboBox()
+        self._guided_is_combo.setEditable(True)
+        for label, value in _IS_OPTIONS:
+            self._guided_is_combo.addItem(label, value)
+        self._guided_is_combo.currentTextChanged.connect(
+            self._update_guided_query_preview
+        )
+        guided_layout.addRow("is:", self._guided_is_combo)
+
+        self._guided_has_combo = QComboBox()
+        self._guided_has_combo.setEditable(True)
+        for label, value in _HAS_OPTIONS:
+            self._guided_has_combo.addItem(label, value)
+        self._guided_has_combo.currentTextChanged.connect(
+            self._update_guided_query_preview
+        )
+        guided_layout.addRow("has:", self._guided_has_combo)
+
+        self._guided_format_combo = QComboBox()
+        self._guided_format_combo.setEditable(True)
+        for label, value in _FORMAT_OPTIONS:
+            self._guided_format_combo.addItem(label, value)
+        self._guided_format_combo.currentTextChanged.connect(
+            self._update_guided_query_preview
+        )
+        guided_layout.addRow("Format:", self._guided_format_combo)
+
+        self._guided_mark_combo = QComboBox()
+        for label, value in _MARK_OPTIONS:
+            self._guided_mark_combo.addItem(label, value)
+        self._guided_mark_combo.currentIndexChanged.connect(
+            lambda _idx: self._update_guided_query_preview()
+        )
+        guided_layout.addRow("Regulation Mark:", self._guided_mark_combo)
+
+        self._guided_print_type_combo = QComboBox()
+        self._guided_print_type_combo.setEditable(True)
+        for label, value in _PRINT_TYPE_OPTIONS:
+            self._guided_print_type_combo.addItem(label, value)
+        self._guided_print_type_combo.currentTextChanged.connect(
+            self._update_guided_query_preview
+        )
+        guided_layout.addRow("Print Type:", self._guided_print_type_combo)
+
+        self._guided_number_edit = QLineEdit()
+        self._guided_number_edit.setPlaceholderText("e.g. 95")
+        self._guided_number_edit.textChanged.connect(
+            self._update_guided_query_preview
+        )
+        guided_layout.addRow("Card number:", self._guided_number_edit)
+
+        self._guided_query_preview = QLineEdit()
+        self._guided_query_preview.setReadOnly(True)
+        self._guided_query_preview.setPlaceholderText(
+            "Generated query"
+        )
+        guided_layout.addRow("Generated query:", self._guided_query_preview)
+
+        guided_btn_wrap = QWidget()
+        guided_btn_row = QHBoxLayout(guided_btn_wrap)
+        guided_btn_row.setContentsMargins(0, 0, 0, 0)
+        self._ex_preset_btn = QPushButton("Preset: EX era")
+        self._ex_preset_btn.clicked.connect(self._apply_ex_era_preset)
+        guided_btn_row.addWidget(self._ex_preset_btn)
+        self._copy_query_btn = QPushButton("Copy to manual query")
+        self._copy_query_btn.clicked.connect(self._copy_guided_query_to_manual)
+        guided_btn_row.addWidget(self._copy_query_btn)
+        guided_btn_row.addStretch()
+        guided_layout.addRow("", guided_btn_wrap)
+
+        sl.addWidget(self._guided_group)
+
         self._set_filter_edit = QLineEdit()
-        self._set_filter_edit.setPlaceholderText("Optional set filter")
+        self._set_filter_edit.setPlaceholderText("Optional provider set filter")
         sl.addWidget(QLabel("Set filter:"))
         sl.addWidget(self._set_filter_edit)
         sl.addStretch()
@@ -229,6 +611,7 @@ class NewJobPage(QWidget):
         self._validate_btn = QPushButton("Validate")
         self._validate_btn.clicked.connect(self._validate_input)
         self._validate_label = QLabel("")
+        self._validate_label.setWordWrap(True)
         val_row = QHBoxLayout()
         val_row.addWidget(self._validate_btn)
         val_row.addWidget(self._validate_label, stretch=1)
@@ -334,20 +717,228 @@ class NewJobPage(QWidget):
 
         # --- Bottom action ---
         self._build_btn = QPushButton("Build Queue")
-        self._build_btn.setStyleSheet(
-            "QPushButton { background-color: #2980b9; color: white; "
-            "padding: 10px 24px; font-size: 14px; font-weight: bold; "
-            "border-radius: 4px; }"
-            "QPushButton:hover { background-color: #3498db; }"
-        )
+        self._build_btn.setProperty("role", "primary")
+        self._build_btn.setMinimumHeight(40)
         self._build_btn.clicked.connect(self._build_queue)
         root.addWidget(self._build_btn)
+
+        self._update_guided_query_preview()
+        self._sync_search_mode(self._guided_mode_cb.isChecked())
 
         root.addStretch()
 
     # ------------------------------------------------------------------
     # Slot helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_query_part(value: str) -> str:
+        return " ".join(value.strip().split())
+
+    @classmethod
+    def _format_query_token(cls, field: str, value: str) -> str:
+        cleaned = cls._normalize_query_part(value)
+        if not cleaned:
+            return ""
+        if any(ch.isspace() for ch in cleaned):
+            cleaned = f'"{cleaned}"'
+        return f"{field}:{cleaned}"
+
+    @staticmethod
+    def _slug_query_value(value: str) -> str:
+        lowered = value.strip().lower()
+        if not lowered:
+            return ""
+        return re.sub(r"[^a-z0-9]+", "-", lowered).strip("-")
+
+    @staticmethod
+    def _combo_value(combo: QComboBox) -> str:
+        data = combo.currentData()
+        if isinstance(data, str) and data:
+            return data
+        text = combo.currentText().strip()
+        if not text:
+            return ""
+        if text.lower().startswith("any "):
+            return ""
+        return text
+
+    @staticmethod
+    def _split_filter_values(value: str) -> list[str]:
+        return [v for v in re.split(r"[,\s]+", value.strip()) if v]
+
+    def _build_guided_query(self) -> str:
+        parts: list[str] = []
+
+        name_term = self._normalize_query_part(self._guided_name_edit.text())
+        if name_term:
+            parts.append(name_term)
+
+        text_term = self._normalize_query_part(self._guided_text_edit.text())
+        if text_term:
+            if self._guided_text_exact_cb.isChecked():
+                safe_text = text_term.replace('"', "")
+                parts.append(f'text:"{safe_text}"')
+            else:
+                parts.append(self._format_query_token("text", text_term))
+
+        exclude_words = self._split_filter_values(self._guided_exclude_edit.text())
+        parts.extend(f"-{word}" for word in exclude_words)
+
+        set_slug = self._slug_query_value(self._guided_set_edit.text())
+        if set_slug:
+            parts.append(self._format_query_token("set", set_slug))
+
+        series_slug = self._slug_query_value(
+            self._combo_value(self._guided_series_combo)
+        )
+        if series_slug:
+            parts.append(self._format_query_token("series", series_slug))
+
+        collection_slug = self._slug_query_value(
+            self._combo_value(self._guided_collection_combo)
+        )
+        if collection_slug:
+            parts.append(self._format_query_token("collection", collection_slug))
+
+        artist_slug = self._slug_query_value(self._guided_artist_edit.text())
+        if artist_slug:
+            parts.append(self._format_query_token("@", artist_slug))
+
+        rarity_slug = self._slug_query_value(
+            self._combo_value(self._guided_rarity_combo)
+        )
+        if rarity_slug:
+            parts.append(self._format_query_token("rarity", rarity_slug))
+
+        card_type = self._slug_query_value(self._combo_value(self._guided_type_combo))
+        if card_type:
+            parts.append(self._format_query_token("type", card_type))
+
+        color = self._slug_query_value(self._combo_value(self._guided_color_combo))
+        if color:
+            parts.append(self._format_query_token("color", color))
+
+        stage = self._slug_query_value(self._combo_value(self._guided_stage_combo))
+        if stage:
+            parts.append(self._format_query_token("stage", stage))
+
+        hp_value = self._normalize_query_part(self._guided_hp_value_edit.text())
+        if hp_value:
+            hp_op = self._guided_hp_op_combo.currentData() or "="
+            parts.append(f"hp{hp_op}{hp_value}")
+
+        weakness = self._slug_query_value(self._combo_value(self._guided_weak_combo))
+        if weakness:
+            parts.append(self._format_query_token("weak", weakness))
+
+        resistance = self._slug_query_value(
+            self._combo_value(self._guided_resist_combo)
+        )
+        if resistance:
+            parts.append(self._format_query_token("resist", resistance))
+
+        retreat_value = self._normalize_query_part(
+            self._guided_retreat_value_edit.text()
+        )
+        if retreat_value:
+            retreat_op = self._guided_retreat_op_combo.currentData() or "="
+            parts.append(f"rc{retreat_op}{retreat_value}")
+
+        is_values = self._split_filter_values(self._combo_value(self._guided_is_combo))
+        for value in is_values:
+            slug = self._slug_query_value(value)
+            if slug:
+                parts.append(self._format_query_token("is", slug))
+
+        has_values = self._split_filter_values(
+            self._combo_value(self._guided_has_combo)
+        )
+        for value in has_values:
+            slug = self._slug_query_value(value)
+            if slug:
+                parts.append(self._format_query_token("has", slug))
+
+        format_slug = self._slug_query_value(
+            self._combo_value(self._guided_format_combo)
+        )
+        if format_slug:
+            parts.append(self._format_query_token("format", format_slug))
+
+        mark_slug = self._slug_query_value(self._combo_value(self._guided_mark_combo))
+        if mark_slug:
+            parts.append(self._format_query_token("mark", mark_slug))
+
+        print_type_slug = self._slug_query_value(
+            self._combo_value(self._guided_print_type_combo)
+        )
+        if print_type_slug:
+            parts.append(self._format_query_token("print-type", print_type_slug))
+
+        number = self._normalize_query_part(self._guided_number_edit.text())
+        if number:
+            parts.append(self._format_query_token("number", number))
+
+        return " ".join(parts)
+
+    def _update_guided_query_preview(self) -> None:
+        query = self._build_guided_query()
+        self._guided_query_preview.setText(query)
+        if self._guided_mode_cb.isChecked():
+            self._search_query.setText(query)
+
+    def _sync_search_mode(self, checked: bool) -> None:
+        self._guided_group.setEnabled(checked)
+        self._search_query.setEnabled(not checked)
+        if checked:
+            self._update_guided_query_preview()
+
+    def _copy_guided_query_to_manual(self) -> None:
+        query = self._build_guided_query()
+        if query:
+            self._search_query.setText(query)
+            self._guided_mode_cb.setChecked(False)
+            self._validate_label.setText(
+                "Guided query copied to manual query field."
+            )
+
+    def _apply_ex_era_preset(self) -> None:
+        self._guided_mode_cb.setChecked(True)
+        self._guided_name_edit.clear()
+        self._guided_text_edit.clear()
+        self._guided_text_exact_cb.setChecked(False)
+        self._guided_exclude_edit.clear()
+        self._guided_set_edit.clear()
+        self._guided_collection_combo.setCurrentIndex(0)
+        self._guided_artist_edit.clear()
+        self._guided_rarity_combo.setCurrentIndex(0)
+        self._guided_type_combo.setCurrentIndex(0)
+        self._guided_color_combo.setCurrentIndex(0)
+        self._guided_stage_combo.setCurrentIndex(0)
+        self._guided_hp_op_combo.setCurrentIndex(0)
+        self._guided_hp_value_edit.clear()
+        self._guided_weak_combo.setCurrentIndex(0)
+        self._guided_resist_combo.setCurrentIndex(0)
+        self._guided_retreat_op_combo.setCurrentIndex(0)
+        self._guided_retreat_value_edit.clear()
+        self._guided_is_combo.setCurrentIndex(0)
+        self._guided_has_combo.setCurrentIndex(0)
+        self._guided_format_combo.setCurrentIndex(0)
+        self._guided_mark_combo.setCurrentIndex(0)
+        self._guided_print_type_combo.setCurrentIndex(0)
+        self._guided_number_edit.clear()
+        index = self._guided_series_combo.findData("ex")
+        if index >= 0:
+            self._guided_series_combo.setCurrentIndex(index)
+        self._update_guided_query_preview()
+        self._validate_label.setText(
+            "Preset applied: EX era (series:ex)."
+        )
+
+    def _effective_search_query(self) -> str:
+        if self._guided_mode_cb.isChecked():
+            return self._build_guided_query().strip()
+        return self._search_query.text().strip()
 
     def _rate_changed(self, value: int) -> None:
         self._rate_label.setText(f"{value / 10:.1f} req/s")
@@ -397,10 +988,18 @@ class NewJobPage(QWidget):
     def _validate_input(self) -> None:
         tab = self._input_tabs.currentIndex()
         if tab == 0:
-            q = self._search_query.text().strip()
-            self._validate_label.setText(
-                f"Query: '{q}'" if q else "Enter a search query"
-            )
+            q = self._effective_search_query()
+            if not q:
+                self._validate_label.setText(
+                    "Add at least one guided filter or enter a manual query."
+                )
+                return
+            hint = ""
+            q_lower = q.lower()
+            if "serie:" in q_lower and "series:" not in q_lower:
+                hint = " Tip: use `series:` (with s)."
+            mode = "Guided" if self._guided_mode_cb.isChecked() else "Manual"
+            self._validate_label.setText(f"{mode} query: '{q}'.{hint}")
         elif tab == 1:
             p = self._import_path.text().strip()
             if p and Path(p).is_file():
@@ -451,9 +1050,11 @@ class NewJobPage(QWidget):
         self._progress_bar.setVisible(True)
 
         if tab == 0:
-            query = self._search_query.text().strip()
+            query = self._effective_search_query()
             if not query:
-                self._validate_label.setText("⚠️ Enter a search query")
+                self._validate_label.setText(
+                    "⚠️ Add guided filters or enter a manual search query"
+                )
                 self._build_btn.setEnabled(True)
                 self._progress_bar.setVisible(False)
                 return
@@ -520,7 +1121,16 @@ class NewJobPage(QWidget):
     def _on_worker_error(self, message: str) -> None:
         self._build_btn.setEnabled(True)
         self._progress_bar.setVisible(False)
-        self._validate_label.setText(f"❌ {message}")
+        hint = ""
+        lowered = message.lower()
+        if "all 3 attempts" in lowered and "pkmncards.com" in lowered:
+            hint = (
+                " Tip: this is usually timeout or provider blocking. "
+                "Try rate limit 1.0 req/s and timeout 60s."
+            )
+        elif "429" in lowered:
+            hint = " Tip: lower rate limit to 0.5-1.0 req/s."
+        self._validate_label.setText(f"❌ {message}{hint}")
 
     # ------------------------------------------------------------------
     # Preference persistence
