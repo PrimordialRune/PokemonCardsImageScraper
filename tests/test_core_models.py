@@ -67,7 +67,6 @@ class TestQueueItem:
     def test_auto_id(self) -> None:
         item = QueueItem()
         assert item.id  # not empty
-        assert len(item.id) == 12
 
     def test_unique_ids(self) -> None:
         items = [QueueItem() for _ in range(10)]

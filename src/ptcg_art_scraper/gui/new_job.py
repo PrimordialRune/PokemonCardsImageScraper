@@ -367,8 +367,8 @@ class NewJobPage(QWidget):
         if path:
             Path(path).write_text(
                 "url,name\n"
-                "https://pkmncards.com/card/charizard-ex-sv-obsidian-flames-ovp/,"
-                "Charizard ex\n",
+                "https://pkmncards.com/card/charizard-ex-sv-obsidian-flames-ovp/"
+                ",Charizard ex\n",
                 encoding="utf-8",
             )
 

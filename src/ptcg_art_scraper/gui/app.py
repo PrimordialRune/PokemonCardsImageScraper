@@ -114,7 +114,7 @@ class MainWindow(QMainWindow):
         for index, (icon, label) in enumerate(_SIDEBAR_ITEMS):
             btn = QPushButton(f"  {icon}  {label}")
             btn.setProperty("active", False)
-            btn.clicked.connect(lambda checked=False, i=index: self._switch_page(i))
+            btn.clicked.connect(lambda _checked=False, i=index: self._switch_page(i))
             sidebar_layout.addWidget(btn)
             self._nav_buttons.append(btn)
 
