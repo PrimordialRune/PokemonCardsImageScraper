@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from typing import Optional, Sequence
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 
 from bs4 import BeautifulSoup
 
@@ -56,7 +56,12 @@ def _parse_card_page(html: str, page_url: str) -> CardAsset:
         # broader fallback: img with pkmncards.com + wp-content path
         for img in soup.find_all("img"):
             src = str(img.get("src", ""))
-            if "pkmncards.com" in src and "/wp-content/" in src:
+            parsed = urlparse(src)
+            if (
+                parsed.hostname
+                and parsed.hostname.endswith("pkmncards.com")
+                and "/wp-content/" in parsed.path
+            ):
                 image_url = src
                 break
     if image_url and image_url.startswith("//"):

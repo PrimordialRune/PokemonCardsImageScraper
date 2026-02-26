@@ -31,7 +31,9 @@ class TestCardPageParsing:
         asset = _parse_card_page(html, "https://pkmncards.com/card/charizard-ex/")
         assert asset.name == "Charizard ex 125/197"
         assert asset.image_url.endswith(".png")
-        assert "pkmncards.com" in asset.image_url
+        from urllib.parse import urlparse
+
+        assert urlparse(asset.image_url).hostname == "pkmncards.com"
         assert asset.source_page_url == "https://pkmncards.com/card/charizard-ex/"
 
     def test_extracts_number(self):
