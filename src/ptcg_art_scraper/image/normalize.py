@@ -47,7 +47,7 @@ def normalize_image(
         new_w = NORM_WIDTH
         new_h = round(orig_h * (NORM_WIDTH / orig_w))
 
-    img = img.resize((new_w, new_h), Image.LANCZOS)  # type: ignore[attr-defined]
+    img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
     left = (new_w - NORM_WIDTH) // 2
     top = (new_h - NORM_HEIGHT) // 2

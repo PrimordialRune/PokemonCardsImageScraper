@@ -16,7 +16,8 @@ class TestSlugify:
         assert slugify("Pikachu V-UNION #1") == "pikachu-v-union-1"
 
     def test_unicode(self):
-        assert slugify("Méwtwo Ünown") == "mewtwo-unknow" or slugify("Méwtwo Ünown").startswith("m")
+        result = slugify("Méwtwo Ünown")
+        assert result.startswith("m")
 
     def test_empty_string(self):
         assert slugify("") == "card"

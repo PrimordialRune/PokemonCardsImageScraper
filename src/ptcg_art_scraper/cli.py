@@ -70,7 +70,7 @@ def scrape(
     provider: str = typer.Option("pkmncards", help="Card image provider to use."),
     query: Optional[str] = typer.Option(None, help="Search query (provider-specific)."),
     input: Optional[Path] = typer.Option(None, help="File with card identifiers/URLs."),
-    set: Optional[str] = typer.Option(None, "--set", help="Set code/name filter."),
+    card_set: Optional[str] = typer.Option(None, "--set", help="Set code/name filter."),
     limit: int = typer.Option(0, help="Max cards to download (0 = unlimited)."),
     concurrency: int = typer.Option(8, help="Max concurrent downloads."),
     rate: float = typer.Option(2.0, help="Max requests per second."),
@@ -113,7 +113,7 @@ def scrape(
             timeout=timeout,
             resume=resume,
             overwrite=overwrite,
-            set_filter=set or "",
+            set_filter=card_set or "",
             limit=limit,
         )
     )
