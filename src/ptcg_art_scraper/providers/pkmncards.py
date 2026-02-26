@@ -59,7 +59,10 @@ def _parse_card_page(html: str, page_url: str) -> CardAsset:
             parsed = urlparse(src)
             if (
                 parsed.hostname
-                and parsed.hostname.endswith("pkmncards.com")
+                and (
+                    parsed.hostname == "pkmncards.com"
+                    or parsed.hostname.endswith(".pkmncards.com")
+                )
                 and "/wp-content/" in parsed.path
             ):
                 image_url = src
