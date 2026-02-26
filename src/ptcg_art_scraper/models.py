@@ -8,6 +8,31 @@ from datetime import datetime, timezone
 
 
 @dataclass(frozen=True)
+class SetRef:
+    """Lightweight reference to a card set."""
+
+    id: str
+    name: str
+    year: str = ""
+    series: str = ""
+
+
+@dataclass(frozen=True)
+class CardAssetStub:
+    """Minimal card info returned by :meth:`BaseProvider.get_set_cards`.
+
+    Enough to build a match key and a :class:`CardRef` for downloading.
+    """
+
+    provider: str
+    set_id: str
+    number: str = ""
+    name: str = ""
+    rarity: str = ""
+    url: str = ""
+
+
+@dataclass(frozen=True)
 class CardRef:
     """Lightweight reference to a card – a URL or provider-specific ID."""
 

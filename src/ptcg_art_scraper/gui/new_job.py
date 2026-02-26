@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import json
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
@@ -23,6 +25,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSlider,
     QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -145,6 +149,58 @@ def _parse_import_file(path: str, provider: str) -> list[QueueItem]:
     return items
 
 
+logger = logging.getLogger(__name__)
+
+
+class _SetCompletionWorker(QThread):
+    """Fetch set card list and detect local completion in a background thread."""
+
+    finished = Signal(list)  # list[SetCardEntry]
+    error = Signal(str)
+
+    def __init__(
+        self,
+        provider: str,
+        set_id: str,
+        output_dir: str,
+        scan_local: bool,
+        rate: float,
+        timeout: float,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._provider = provider
+        self._set_id = set_id
+        self._output_dir = output_dir
+        self._scan_local = scan_local
+        self._rate = rate
+        self._timeout = timeout
+
+    def run(self) -> None:  # noqa: D401
+        try:
+            entries = asyncio.run(self._fetch())
+            self.finished.emit(entries)
+        except Exception as exc:  # noqa: BLE001
+            self.error.emit(str(exc))
+
+    async def _fetch(self):
+        import httpx
+
+        from ptcg_art_scraper.net.http import RateLimiter
+        from ptcg_art_scraper.storage.completion import detect_completion
+
+        rl = RateLimiter(self._rate)
+        from ptcg_art_scraper.core.engine import _get_provider
+
+        prov = _get_provider(self._provider)
+        async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=True) as client:
+            stubs = await prov.get_set_cards(client, self._set_id, rate_limiter=rl)
+        entries = detect_completion(
+            stubs, Path(self._output_dir), scan_local=self._scan_local
+        )
+        return entries
+
+
 # ---------------------------------------------------------------------------
 # New-job page widget
 # ---------------------------------------------------------------------------
@@ -223,6 +279,39 @@ class NewJobPage(QWidget):
         self._urls_edit.setPlaceholderText("Paste URLs, one per line")
         ul.addWidget(self._urls_edit)
         self._input_tabs.addTab(urls_tab, "Direct URLs")
+
+        # Set Completion tab
+        sc_tab = QWidget()
+        sc_layout = QVBoxLayout(sc_tab)
+        set_row = QHBoxLayout()
+        set_row.addWidget(QLabel("Set ID:"))
+        self._set_id_edit = QLineEdit()
+        self._set_id_edit.setPlaceholderText("e.g. paldea-evolved")
+        set_row.addWidget(self._set_id_edit, stretch=1)
+        sc_layout.addLayout(set_row)
+        self._scan_local_cb = QCheckBox("Scan local library")
+        self._scan_local_cb.setChecked(True)
+        sc_layout.addWidget(self._scan_local_cb)
+
+        # Results table (hidden until populated)
+        self._sc_table = QTableWidget(0, 5)
+        self._sc_table.setHorizontalHeaderLabels(
+            ["Number", "Name", "Rarity", "Status", "Path"]
+        )
+        self._sc_table.horizontalHeader().setStretchLastSection(True)
+        self._sc_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        self._sc_table.setVisible(False)
+        sc_layout.addWidget(self._sc_table)
+
+        self._sc_download_missing_cb = QCheckBox(
+            "Download only missing (uncheck to re-download all)"
+        )
+        self._sc_download_missing_cb.setChecked(True)
+        sc_layout.addWidget(self._sc_download_missing_cb)
+        sc_layout.addStretch()
+        self._input_tabs.addTab(sc_tab, "Set Completion")
 
         src_layout.addWidget(self._input_tabs)
 
@@ -412,6 +501,11 @@ class NewJobPage(QWidget):
                 )
             else:
                 self._validate_label.setText("Select a valid file")
+        elif tab == 3:
+            s = self._set_id_edit.text().strip()
+            self._validate_label.setText(
+                f"Set ID: '{s}'" if s else "Enter a set ID"
+            )
         else:
             lines = [
                 ln.strip()
@@ -490,7 +584,7 @@ class NewJobPage(QWidget):
             worker.error.connect(self._on_worker_error)
             self._worker = worker
             worker.start()
-        else:
+        elif tab == 2:
             lines = [
                 ln.strip()
                 for ln in self._urls_edit.toPlainText().splitlines()
@@ -505,6 +599,29 @@ class NewJobPage(QWidget):
                 for url in lines
             ]
             self._on_items_ready(config, items)
+        elif tab == 3:
+            # Set Completion tab
+            set_id = self._set_id_edit.text().strip()
+            if not set_id:
+                self._validate_label.setText("⚠️ Enter a set ID")
+                self._build_btn.setEnabled(True)
+                self._progress_bar.setVisible(False)
+                return
+            worker = _SetCompletionWorker(
+                provider=config.provider,
+                set_id=set_id,
+                output_dir=config.output_dir,
+                scan_local=self._scan_local_cb.isChecked(),
+                rate=config.rate,
+                timeout=config.timeout,
+                parent=self,
+            )
+            worker.finished.connect(
+                lambda entries: self._on_set_completion_ready(config, entries)
+            )
+            worker.error.connect(self._on_worker_error)
+            self._worker = worker
+            worker.start()
 
     def _on_items_ready(
         self, config: JobConfig, items: list[QueueItem]
@@ -521,6 +638,55 @@ class NewJobPage(QWidget):
         self._build_btn.setEnabled(True)
         self._progress_bar.setVisible(False)
         self._validate_label.setText(f"❌ {message}")
+
+    def _on_set_completion_ready(self, config: JobConfig, entries: list) -> None:
+        """Handle results from set-completion scan: populate table and queue missing."""
+        from ptcg_art_scraper.storage.completion import CardStatus
+
+        self._build_btn.setEnabled(True)
+        self._progress_bar.setVisible(False)
+
+        if not entries:
+            self._validate_label.setText("⚠️ No cards found in this set")
+            return
+
+        # Populate the table
+        self._sc_table.setVisible(True)
+        self._sc_table.setRowCount(len(entries))
+        for row, entry in enumerate(entries):
+            self._sc_table.setItem(row, 0, QTableWidgetItem(entry.stub.number))
+            self._sc_table.setItem(row, 1, QTableWidgetItem(entry.stub.name))
+            self._sc_table.setItem(row, 2, QTableWidgetItem(entry.stub.rarity))
+            self._sc_table.setItem(row, 3, QTableWidgetItem(entry.status.value))
+            self._sc_table.setItem(row, 4, QTableWidgetItem(entry.output_path))
+
+        downloaded = sum(1 for e in entries if e.status == CardStatus.DOWNLOADED)
+        missing = sum(1 for e in entries if e.status == CardStatus.MISSING)
+        self._validate_label.setText(
+            f"✅ {len(entries)} cards in set — {downloaded} downloaded, {missing} missing"
+        )
+
+        # Build queue items for missing cards only (or all if re-download)
+        download_missing_only = self._sc_download_missing_cb.isChecked()
+        to_queue = [
+            e for e in entries
+            if not download_missing_only or e.status == CardStatus.MISSING
+        ]
+        items = [
+            QueueItem(
+                identifier=e.stub.url,
+                source_url=e.stub.url,
+                name=e.stub.name,
+                number=e.stub.number,
+                set_code=e.stub.set_id,
+                rarity=e.stub.rarity,
+                provider=e.stub.provider,
+            )
+            for e in to_queue
+            if e.stub.url
+        ]
+        if items:
+            self.job_requested.emit(config, items)
 
     # ------------------------------------------------------------------
     # Preference persistence

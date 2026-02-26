@@ -14,6 +14,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ptcg_art_scraper.image.normalize import normalize_image, verify_image
 from ptcg_art_scraper.models import SidecarMetadata
+from ptcg_art_scraper.storage.completion import CardStatus, detect_completion
 from ptcg_art_scraper.storage.layout import card_output_path, sidecar_path, template_output_path
 from ptcg_art_scraper.storage.metadata import save_sidecar
 
@@ -299,6 +300,181 @@ def verify(
     console.print(f"\nChecked {total} image(s): {total - bad} OK, {bad} failed.")
     if bad:
         raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------------------
+# complete-set
+# ---------------------------------------------------------------------------
+@app.command("complete-set")
+def complete_set(
+    out: Path = typer.Option(..., help="Output directory for normalized images."),
+    provider: str = typer.Option("pkmncards", help="Card image provider to use."),
+    set_id: str = typer.Option(..., "--set-id", help="Set identifier to complete."),
+    concurrency: int = typer.Option(8, help="Max concurrent downloads."),
+    rate: float = typer.Option(2.0, help="Max requests per second."),
+    retries: int = typer.Option(3, help="Retry count on transient failures."),
+    timeout: float = typer.Option(20.0, help="HTTP timeout in seconds."),
+    format: str = typer.Option("png", help="Output format: png or jpg."),
+    redownload: bool = typer.Option(False, help="Re-download even if already present."),
+    no_scan: bool = typer.Option(False, "--no-scan", help="Skip local library scan."),
+    folder_template: Optional[str] = typer.Option(
+        None,
+        "--folder-template",
+        help=(
+            "Output path template with tokens: {set}, {setId}, {number},"
+            " {name}, {basicType}, {specificType}, {rarity}, {fmt}."
+        ),
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Download all missing cards from a set (set-completion mode)."""
+    _setup_logging(verbose)
+    fmt = format.lower()
+    if fmt not in ("png", "jpg", "jpeg"):
+        raise typer.BadParameter("--format must be png or jpg")
+    if fmt == "jpeg":
+        fmt = "jpg"
+
+    prov = _get_provider(provider)
+    if not prov.supports_set_completion:
+        console.print(f"[red]Provider {provider!r} does not support set completion.[/red]")
+        raise typer.Exit(1)
+
+    asyncio.run(
+        _run_complete_set(
+            prov=prov,
+            set_id=set_id,
+            out=out,
+            fmt=fmt,
+            concurrency=concurrency,
+            rate=rate,
+            retries=retries,
+            timeout=timeout,
+            redownload=redownload,
+            scan_local=not no_scan,
+            folder_template=folder_template or "",
+        )
+    )
+
+
+async def _run_complete_set(
+    *,
+    prov,
+    set_id: str,
+    out: Path,
+    fmt: str,
+    concurrency: int,
+    rate: float,
+    retries: int,
+    timeout: float,
+    redownload: bool,
+    scan_local: bool,
+    folder_template: str = "",
+) -> None:
+    import httpx
+
+    from ptcg_art_scraper.models import CardRef
+    from ptcg_art_scraper.net.http import RateLimiter
+
+    rl = RateLimiter(rate)
+    sem = asyncio.Semaphore(concurrency)
+    errors: list[dict] = []
+    succeeded = 0
+    skipped = 0
+    failed = 0
+
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        # 1. Get all cards in the set
+        with Progress(
+            SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
+        ) as progress:
+            progress.add_task("Fetching set card list…", total=None)
+            stubs = await prov.get_set_cards(client, set_id, rate_limiter=rl)
+
+        if not stubs:
+            console.print(f"[yellow]No cards found for set {set_id!r}.[/yellow]")
+            return
+
+        console.print(f"[bold]Set contains {len(stubs)} card(s).[/bold]")
+
+        # 2. Detect local presence
+        entries = detect_completion(stubs, out, scan_local=scan_local)
+
+        downloaded = sum(1 for e in entries if e.status == CardStatus.DOWNLOADED)
+        missing = sum(1 for e in entries if e.status == CardStatus.MISSING)
+        console.print(f"  Downloaded: {downloaded}  Missing: {missing}")
+
+        # 3. Build download list
+        to_download = entries if redownload else [
+            e for e in entries if e.status == CardStatus.MISSING
+        ]
+
+        if not to_download:
+            console.print("[green]Set is already complete! Nothing to download.[/green]")
+            return
+
+        console.print(f"[bold]Downloading {len(to_download)} card(s)…[/bold]")
+
+        # 4. Download missing cards
+        async def _process(entry) -> None:
+            nonlocal succeeded, skipped, failed
+            stub = entry.stub
+            async with sem:
+                try:
+                    if not stub.url:
+                        failed += 1
+                        errors.append({"ref": stub.name, "error": "No URL available"})
+                        return
+                    ref = CardRef(provider=prov.name, url=stub.url)
+                    asset = await prov.resolve(client, ref, rate_limiter=rl)
+                    if folder_template:
+                        dest = template_output_path(out, asset, fmt=fmt, template=folder_template)
+                    else:
+                        dest = card_output_path(out, asset, fmt=fmt)
+                    json_dest = sidecar_path(dest)
+
+                    fetched = await prov.fetch_image(client, asset, rate_limiter=rl)
+                    meta_info = normalize_image(fetched.data, dest, fmt=fmt)
+
+                    sidecar = SidecarMetadata.from_asset(
+                        asset,
+                        fetched_at_utc=SidecarMetadata.now_utc(),
+                        normalized_size=[meta_info["width"], meta_info["height"]],
+                        dpi=meta_info["dpi"],
+                        original_size=[meta_info["original_width"], meta_info["original_height"]],
+                        sha256_original=meta_info["sha256_original"],
+                        sha256_normalized=meta_info["sha256_normalized"],
+                        normalized_output_path=str(dest),
+                    )
+                    save_sidecar(sidecar, json_dest)
+                    succeeded += 1
+                except Exception as exc:
+                    failed += 1
+                    errors.append({"ref": stub.url or stub.name, "error": str(exc)})
+                    logger.error("Failed %s: %s", stub.url or stub.name, exc)
+
+        tasks = [asyncio.create_task(_process(e)) for e in to_download]
+
+        with Progress(
+            SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
+        ) as progress:
+            tid = progress.add_task("Downloading…", total=len(tasks))
+            for coro in asyncio.as_completed(tasks):
+                await coro
+                progress.advance(tid)
+
+    # Summary
+    console.print(f"\n[green]Succeeded:[/green] {succeeded}")
+    console.print(f"[yellow]Skipped:[/yellow]  {skipped}")
+    console.print(f"[red]Failed:[/red]    {failed}")
+
+    if errors:
+        err_path = out / "errors.jsonl"
+        err_path.parent.mkdir(parents=True, exist_ok=True)
+        with err_path.open("a", encoding="utf-8") as fh:
+            for err in errors:
+                fh.write(json.dumps(err) + "\n")
+        console.print(f"[red]Error details written to {err_path}[/red]")
 
 
 # ---------------------------------------------------------------------------
