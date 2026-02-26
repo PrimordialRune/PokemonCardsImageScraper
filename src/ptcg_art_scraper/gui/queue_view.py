@@ -407,7 +407,7 @@ class QueuePage(QWidget):
                 if item.basic_type != type_filter:
                     visible = False
             if visible and rarity_filter != "All":
-                if item.rarity.lower() != rarity_filter.lower():
+                if not item.rarity or item.rarity.lower() != rarity_filter.lower():
                     visible = False
             self._table.setRowHidden(row, not visible)
 

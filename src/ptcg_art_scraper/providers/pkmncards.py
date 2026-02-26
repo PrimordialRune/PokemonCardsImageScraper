@@ -102,7 +102,7 @@ def _parse_abilities(soup: BeautifulSoup | Tag) -> list[dict]:
 
 def _parse_weakness_resistance(
     rows: list[Tag], label: str
-) -> dict:
+) -> dict[str, str]:
     """Return {type, value} for weakness or resistance."""
     raw = _extract_info_field(rows, label)
     if not raw:

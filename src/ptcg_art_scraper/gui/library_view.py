@@ -200,7 +200,7 @@ class LibraryPage(QWidget):
                 row, 1, QTableWidgetItem(f"{size_kb:.1f} KB")
             )
             meta = self._load_sidecar(fp)
-            set_name = meta.get("set", meta.get("set_name", fp.parent.name))
+            set_name = meta.get("set") or meta.get("set_name") or fp.parent.name
             basic_type = meta.get("basicType", "")
             rarity = meta.get("rarity", "")
             status = "✅" if meta else "—"

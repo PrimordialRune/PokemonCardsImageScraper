@@ -36,7 +36,7 @@ def expand_template(template: str, asset: CardAsset, fmt: str = "png") -> str:
     """
     tokens = _token_map(asset, fmt)
 
-    def _replace(m: re.Match) -> str:  # type: ignore[type-arg]
+    def _replace(m: re.Match[str]) -> str:
         key = m.group(1)
         return tokens.get(key, m.group(0))
 
