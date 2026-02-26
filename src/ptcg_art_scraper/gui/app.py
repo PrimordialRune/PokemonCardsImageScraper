@@ -142,6 +142,13 @@ class MainWindow(QMainWindow):
         self.setStatusBar(status_bar)
         status_bar.showMessage("Ready")
 
+        # Connect New Job → Queue
+        new_job_page: NewJobPage = self._pages[0]  # type: ignore[assignment]
+        queue_page: QueuePage = self._pages[1]  # type: ignore[assignment]
+        new_job_page.job_requested.connect(
+            lambda config, items: self._start_job(queue_page, config, items)
+        )
+
         # Activate the first page by default
         self._switch_page(0)
 
@@ -157,6 +164,13 @@ class MainWindow(QMainWindow):
             # Force style refresh after dynamic property change
             btn.style().unpolish(btn)
             btn.style().polish(btn)
+
+    def _start_job(
+        self, queue_page: QueuePage, config: object, items: list[object]
+    ) -> None:
+        """Switch to Queue page and begin the scrape job."""
+        self._switch_page(1)
+        queue_page.set_queue(items, config)  # type: ignore[arg-type]
 
     # ------------------------------------------------------------------
     # Geometry persistence
@@ -177,4 +191,4 @@ def launch(argv: Sequence[str] | None = None) -> int:
     app = QApplication(list(argv) if argv is not None else sys.argv)
     window = MainWindow()
     window.show()
-    return app.exec()
+    return int(app.exec())

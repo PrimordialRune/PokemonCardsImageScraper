@@ -287,3 +287,20 @@ def verify(
     console.print(f"\nChecked {total} image(s): {total - bad} OK, {bad} failed.")
     if bad:
         raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------------------
+# gui
+# ---------------------------------------------------------------------------
+@app.command()
+def gui() -> None:
+    """Launch the graphical user interface."""
+    try:
+        from ptcg_art_scraper.gui.app import launch
+    except ImportError as exc:
+        console.print(
+            f"[red]GUI dependencies are not installed: {exc}[/red]\n"
+            "Install with: pip install ptcg-art-scraper[gui]"
+        )
+        raise typer.Exit(1) from None
+    raise SystemExit(launch())

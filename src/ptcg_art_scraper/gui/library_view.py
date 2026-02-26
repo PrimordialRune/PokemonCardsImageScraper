@@ -208,7 +208,7 @@ class LibraryPage(QWidget):
         sidecar = image_path.with_suffix(".json")
         if sidecar.is_file():
             try:
-                return json.loads(  # type: ignore[return-value]
+                return json.loads(  # type: ignore[no-any-return]
                     sidecar.read_text(encoding="utf-8")
                 )
             except (json.JSONDecodeError, OSError):
