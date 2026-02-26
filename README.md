@@ -54,6 +54,46 @@ ptcg_art_scraper verify --input ./normalized
 
 Exit code is non-zero if any image fails (useful in CI).
 
+## GUI Quick Start
+
+A graphical interface is available for users who prefer not to use the terminal.
+
+### Install
+
+```bash
+pip install -e ".[gui]"
+```
+
+### Launch
+
+```bash
+# Via CLI subcommand
+ptcg_art_scraper gui
+
+# Or directly
+ptcg_art_scraper_gui
+```
+
+### Workflow
+
+1. **New Job** – Select a source (search query, import file, or paste URLs), choose an output folder and format, then click **Build Queue**.
+2. **Queue & Progress** – Watch per-card status (resolving → fetching → normalizing → saved), pause/resume, cancel, or retry failed items.
+3. **Library** – Browse downloaded card images, view metadata from sidecar JSON files, and open images or folders.
+4. **Settings** – Configure default output folder, provider, format, concurrency, rate limit, retries, and timeout.
+5. **Help / About** – Quick-start guide, troubleshooting tips, legal note, and a **Copy Diagnostics** button for bug reports.
+
+### Packaging (PyInstaller)
+
+```bash
+pip install pyinstaller
+pyinstaller --name "PTCG Art Scraper" \
+    --windowed \
+    --onefile \
+    src/ptcg_art_scraper/gui/app.py
+```
+
+The resulting executable will be in `dist/`.
+
 ### Key options (`scrape`)
 
 | Option | Default | Description |
@@ -119,8 +159,18 @@ pytest -m "not network" -v
 
 ```
 src/ptcg_art_scraper/
-├── cli.py                 # Typer CLI (scrape / normalize / verify)
+├── cli.py                 # Typer CLI (scrape / normalize / verify / gui)
 ├── models.py              # CardRef, CardAsset, FetchedImage, etc.
+├── core/
+│   ├── models.py          # JobConfig, QueueItem, JobEvent (shared)
+│   └── engine.py          # ScrapeEngine with event callbacks
+├── gui/
+│   ├── app.py             # MainWindow + sidebar navigation
+│   ├── new_job.py         # New Job wizard page
+│   ├── queue_view.py      # Queue & Progress page
+│   ├── library_view.py    # Library browser page
+│   ├── settings_view.py   # Settings page
+│   └── help_view.py       # Help / About page
 ├── providers/
 │   ├── base.py            # Abstract provider interface
 │   └── pkmncards.py       # pkmncards.com provider
@@ -135,6 +185,7 @@ src/ptcg_art_scraper/
     └── slugify.py         # Filesystem-safe slug generation
 tests/
 ├── test_cli.py            # CLI smoke tests
+├── test_core_models.py    # Job/event model tests
 ├── test_normalize.py      # Image pipeline + DPI golden tests
 ├── test_provider_pkmncards.py  # HTML parsing with fixtures
 └── test_slugify_paths.py  # Slug + output path rules
