@@ -153,12 +153,18 @@ class TestScanFilenames:
 class TestDetectCompletion:
     def _stubs(self) -> list[CardAssetStub]:
         return [
-            CardAssetStub(provider="pkmncards", set_id="sv4", number="1", name="Card One",
-                          url="https://pkmncards.com/card/card-one-1/"),
-            CardAssetStub(provider="pkmncards", set_id="sv4", number="2", name="Card Two",
-                          url="https://pkmncards.com/card/card-two-2/"),
-            CardAssetStub(provider="pkmncards", set_id="sv4", number="3", name="Card Three",
-                          url="https://pkmncards.com/card/card-three-3/"),
+            CardAssetStub(
+                provider="pkmncards", set_id="sv4", number="1",
+                name="Card One", url="https://pkmncards.com/card/card-one-1/",
+            ),
+            CardAssetStub(
+                provider="pkmncards", set_id="sv4", number="2",
+                name="Card Two", url="https://pkmncards.com/card/card-two-2/",
+            ),
+            CardAssetStub(
+                provider="pkmncards", set_id="sv4", number="3",
+                name="Card Three", url="https://pkmncards.com/card/card-three-3/",
+            ),
         ]
 
     def test_all_missing(self, tmp_path: Path) -> None:

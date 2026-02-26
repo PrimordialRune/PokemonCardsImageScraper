@@ -405,9 +405,9 @@ async def _run_complete_set(
         console.print(f"  Downloaded: {downloaded}  Missing: {missing}")
 
         # 3. Build download list
-        to_download = [
-            e for e in entries if e.status == CardStatus.MISSING or (redownload and True)
-        ] if redownload else [e for e in entries if e.status == CardStatus.MISSING]
+        to_download = entries if redownload else [
+            e for e in entries if e.status == CardStatus.MISSING
+        ]
 
         if not to_download:
             console.print("[green]Set is already complete! Nothing to download.[/green]")
