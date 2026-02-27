@@ -112,6 +112,17 @@ The resulting executable will be in `dist/`.
 | `--format` | png | `png` or `jpg` |
 | `--overwrite` | false | Re-download existing |
 
+### Local index data for `pokemontcgio_images`
+
+If you use `--provider pokemontcgio_images`, place a local clone/download of
+`PokemonTCG/pokemon-tcg-data` at:
+
+```text
+<this-project>/pokemon-tcg-data/
+  sets/en.json
+  cards/en/*.json
+```
+
 ## Output structure
 
 ```

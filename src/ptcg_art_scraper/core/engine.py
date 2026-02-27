@@ -40,6 +40,10 @@ def _get_provider(name: str):
         from ptcg_art_scraper.providers.pkmncards import PkmnCardsProvider
 
         return PkmnCardsProvider()
+    if name == "pokemontcgio_images":
+        from ptcg_art_scraper.providers.pokemontcgio_images import PokemonTcgioImagesProvider
+
+        return PokemonTcgioImagesProvider()
     raise ValueError(f"Unknown provider: {name!r}")
 
 
@@ -274,6 +278,11 @@ class ScrapeEngine:
                     sha256_original=meta_info["sha256_original"],
                     sha256_normalized=meta_info["sha256_normalized"],
                     normalized_output_path=str(dest),
+                    image_variant=(
+                        "hires" if "_hires.png" in fetched.source_url
+                        else "standard" if asset.provider == "pokemontcgio_images"
+                        else ""
+                    ),
                 )
                 save_sidecar(sidecar, json_dest)
 
