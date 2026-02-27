@@ -10,6 +10,7 @@ import pytest
 
 from ptcg_art_scraper.index.client import (
     PokemonTcgDataIndexClient,
+    _LOCAL_DATA_ROOT,
     _parse_cards,
     _parse_sets,
 )
@@ -273,6 +274,17 @@ class TestIndexClientCache:
 
         monkeypatch.setattr(PokemonTcgDataIndexClient, "_fetch_json", failing_fetch)
         assert client.list_cards_in_set("unknown_set") == []
+
+
+class TestBundledLocalData:
+    def test_local_data_root_exists(self):
+        assert _LOCAL_DATA_ROOT.exists()
+
+    def test_default_client_reads_bundled_sets(self):
+        client = PokemonTcgDataIndexClient(ttl=0)
+        sets = client.list_sets()
+        assert sets
+        assert any(s.id == "base1" for s in sets)
 
 
 # ---------------------------------------------------------------------------

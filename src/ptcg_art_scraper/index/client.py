@@ -8,8 +8,6 @@ import logging
 import time
 from pathlib import Path
 
-import httpx
-
 from ptcg_art_scraper.index.models import CardIndexEntry, SetInfo
 
 logger = logging.getLogger(__name__)
@@ -23,10 +21,10 @@ _DEFAULT_TTL = 86400
 # Schema version – bump when the cache format changes.
 _SCHEMA_VERSION = 1
 
-# Base URL for raw JSON in the pokemon-tcg-data repo (English).
-_DATA_BASE = (
-    "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/json/en"
-)
+# Local copy of pokemon-tcg-data bundled with this repository.
+_LOCAL_DATA_ROOT = Path(__file__).resolve().parents[3] / "pokemon-tcg-data"
+_LOCAL_SETS_PATH = _LOCAL_DATA_ROOT / "sets" / "en.json"
+_LOCAL_CARDS_DIR = _LOCAL_DATA_ROOT / "cards" / "en"
 
 
 # ---------------------------------------------------------------------------
@@ -93,11 +91,13 @@ class PokemonTcgDataIndexClient(IndexClient):
         *,
         cache_dir: Path | None = None,
         ttl: int = _DEFAULT_TTL,
-        timeout: float = 20.0,
+        data_root: Path | None = None,
     ) -> None:
         self._cache_dir = cache_dir or _DEFAULT_CACHE_DIR
         self._ttl = ttl
-        self._timeout = timeout
+        root = data_root or _LOCAL_DATA_ROOT
+        self._sets_path = root / "sets" / "en.json"
+        self._cards_dir = root / "cards" / "en"
 
     # -- public interface ---------------------------------------------------
 
@@ -106,7 +106,7 @@ class PokemonTcgDataIndexClient(IndexClient):
         if cached is not None:
             return _parse_sets(cached)
 
-        raw = self._fetch_json(f"{_DATA_BASE}/sets.json")
+        raw = self._fetch_json(self._sets_path)
         _write_cache(self._cache_dir, "sets", raw)
         return _parse_sets(raw)
 
@@ -122,9 +122,9 @@ class PokemonTcgDataIndexClient(IndexClient):
         if cached is not None:
             return _parse_cards(cached, set_id)
 
-        url = f"{_DATA_BASE}/cards/{set_id}.json"
+        path = self._cards_dir / f"{set_id}.json"
         try:
-            raw = self._fetch_json(url)
+            raw = self._fetch_json(path)
         except Exception:
             logger.warning("Could not fetch card index for set %s", set_id)
             return []
@@ -133,11 +133,8 @@ class PokemonTcgDataIndexClient(IndexClient):
 
     # -- helpers ------------------------------------------------------------
 
-    def _fetch_json(self, url: str) -> object:
-        with httpx.Client(timeout=self._timeout, follow_redirects=True) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            return resp.json()
+    def _fetch_json(self, path: Path) -> object:
+        return json.loads(path.read_text(encoding="utf-8"))
 
 
 # ---------------------------------------------------------------------------
