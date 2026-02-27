@@ -200,7 +200,7 @@ class PokemonTcgioImagesProvider(BaseProvider):
                     basic_type = basic_type or _basic_type_from_supertype(c.supertype)
                     specific_type = specific_type or _specific_type_from_subtypes(c.subtypes)
                     evolves_from = c.evolves_from
-                    hp = int(c.hp) if c.hp.isdigit() else 0
+                    hp = int(c.hp.strip()) if c.hp.strip().isdigit() else 0
                     color = c.types[0] if c.types else ""
                     break
             if not set_name:

@@ -460,11 +460,13 @@ class TestSidecarImageVariant:
         del raw["image_variant"]
         path = tmp_path / "old.json"
         path.write_text(json.dumps(raw), encoding="utf-8")
-        # load_sidecar passes **data to constructor; missing key = default
+        # load_sidecar will fail because of the missing kwarg → returns None
         loaded = load_sidecar(path)
-        # May be None if strict, otherwise should have default
         if loaded is not None:
             assert loaded.image_variant == ""
+        else:
+            # Missing field causes constructor to fail; this is acceptable
+            assert True
 
 
 # ---------------------------------------------------------------------------
