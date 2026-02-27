@@ -8,12 +8,6 @@ test_output/
 test_tmp/
 output_dimcheck/
 normalized_out/
-!pokemon-tcg-data/
-!pokemon-tcg-data/cards/
-!pokemon-tcg-data/cards/en/
-!pokemon-tcg-data/cards/en/*.json
-!pokemon-tcg-data/sets/
-!pokemon-tcg-data/sets/en.json
 
 # Log files
 *.log

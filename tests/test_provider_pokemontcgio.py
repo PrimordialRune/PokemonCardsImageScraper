@@ -10,7 +10,6 @@ import pytest
 
 from ptcg_art_scraper.index.client import (
     PokemonTcgDataIndexClient,
-    _LOCAL_DATA_ROOT,
     _parse_cards,
     _parse_sets,
 )
@@ -275,13 +274,25 @@ class TestIndexClientCache:
         monkeypatch.setattr(PokemonTcgDataIndexClient, "_fetch_json", failing_fetch)
         assert client.list_cards_in_set("unknown_set") == []
 
+    def test_list_sets_returns_empty_on_fetch_failure(self, tmp_path: Path, monkeypatch):
+        client = PokemonTcgDataIndexClient(cache_dir=tmp_path, ttl=3600)
 
-class TestBundledLocalData:
-    def test_local_data_root_exists(self):
-        assert _LOCAL_DATA_ROOT.exists()
+        def failing_fetch(self_inner, url):
+            raise RuntimeError("Missing local data")
 
-    def test_default_client_reads_bundled_sets(self):
-        client = PokemonTcgDataIndexClient(ttl=0)
+        monkeypatch.setattr(PokemonTcgDataIndexClient, "_fetch_json", failing_fetch)
+        assert client.list_sets() == []
+
+
+class TestLocalDataLayout:
+    def test_client_reads_sets_from_local_repo_layout(self, tmp_path: Path):
+        data_root = tmp_path / "pokemon-tcg-data"
+        (data_root / "sets").mkdir(parents=True)
+        (data_root / "cards" / "en").mkdir(parents=True)
+        (data_root / "sets" / "en.json").write_text(
+            json.dumps(SAMPLE_SETS_JSON), encoding="utf-8"
+        )
+        client = PokemonTcgDataIndexClient(ttl=0, data_root=data_root)
         sets = client.list_sets()
         assert sets
         assert any(s.id == "base1" for s in sets)

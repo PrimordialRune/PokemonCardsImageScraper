@@ -21,10 +21,8 @@ _DEFAULT_TTL = 86400
 # Schema version – bump when the cache format changes.
 _SCHEMA_VERSION = 1
 
-# Local copy of pokemon-tcg-data bundled with this repository.
+# Local folder expected to mirror PokemonTCG/pokemon-tcg-data.
 _LOCAL_DATA_ROOT = Path(__file__).resolve().parents[3] / "pokemon-tcg-data"
-_LOCAL_SETS_PATH = _LOCAL_DATA_ROOT / "sets" / "en.json"
-_LOCAL_CARDS_DIR = _LOCAL_DATA_ROOT / "cards" / "en"
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +78,7 @@ def _write_cache(cache_dir: Path, key: str, payload: object) -> None:
 
 
 class PokemonTcgDataIndexClient(IndexClient):
-    """Fetches set/card data from the PokemonTCG/pokemon-tcg-data GitHub repo.
+    """Reads set/card data from a local PokemonTCG/pokemon-tcg-data copy.
 
     Responses are cached on disk with a configurable TTL so subsequent calls
     are fast and offline-friendly.
@@ -106,7 +104,11 @@ class PokemonTcgDataIndexClient(IndexClient):
         if cached is not None:
             return _parse_sets(cached)
 
-        raw = self._fetch_json(self._sets_path)
+        try:
+            raw = self._fetch_json(self._sets_path)
+        except Exception:
+            logger.warning("Could not read set index from %s", self._sets_path)
+            return []
         _write_cache(self._cache_dir, "sets", raw)
         return _parse_sets(raw)
 
