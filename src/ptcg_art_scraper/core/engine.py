@@ -8,6 +8,7 @@ worker thread or CLI progress bar) can update status in real time.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from pathlib import Path
 from typing import Callable
@@ -40,6 +41,23 @@ def _get_provider(name: str):
 
         return PkmnCardsProvider()
     raise ValueError(f"Unknown provider: {name!r}")
+
+
+def _decode_ref_metadata(card_id: str) -> dict[str, str]:
+    """Decode optional metadata hints stored in ``CardRef.card_id``."""
+    if not card_id:
+        return {}
+    try:
+        payload = json.loads(card_id)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key, value in payload.items():
+        if isinstance(key, str) and value is not None:
+            out[key] = str(value)
+    return out
 
 
 class ScrapeEngine:
@@ -177,6 +195,13 @@ class ScrapeEngine:
                 ref = CardRef(provider=self.config.provider, url=item.identifier)
                 asset = await prov.resolve(client, ref, rate_limiter=rl)
 
+                # Preserve metadata parsed during search if detail resolution is sparse.
+                asset.name = asset.name or item.name
+                asset.set_name = asset.set_name or item.set_name
+                asset.set_code = asset.set_code or item.set_code
+                asset.number = asset.number or item.number
+                asset.image_url = asset.image_url or item.image_url
+
                 # Update item metadata
                 item.name = asset.name or item.name
                 item.set_name = asset.set_name or item.set_name
@@ -298,11 +323,17 @@ async def resolve_search(
         )
         items: list[QueueItem] = []
         for ref in refs:
+            meta = _decode_ref_metadata(ref.card_id)
             items.append(
                 QueueItem(
                     identifier=ref.url,
                     source_url=ref.url,
                     provider=provider_name,
+                    name=meta.get("name", ""),
+                    set_name=meta.get("set_name", ""),
+                    set_code=meta.get("set_code", ""),
+                    number=meta.get("number", ""),
+                    image_url=meta.get("image_url", ""),
                 )
             )
         return items

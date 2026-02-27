@@ -10,6 +10,7 @@ from ptcg_art_scraper.core.models import (
     JobSummary,
     QueueItem,
 )
+from ptcg_art_scraper.core.engine import _decode_ref_metadata
 
 
 class TestItemStatus:
@@ -128,3 +129,16 @@ class TestJobSummary:
         s.failed += 1
         s.skipped += 1
         assert s.succeeded + s.failed + s.skipped == 5
+
+
+class TestRefMetadataDecode:
+    def test_valid_payload(self) -> None:
+        payload = '{"name":"Lunatone","set_name":"Sandstorm","number":"8"}'
+        data = _decode_ref_metadata(payload)
+        assert data["name"] == "Lunatone"
+        assert data["set_name"] == "Sandstorm"
+        assert data["number"] == "8"
+
+    def test_invalid_payload_returns_empty(self) -> None:
+        assert _decode_ref_metadata("not-json") == {}
+        assert _decode_ref_metadata("") == {}

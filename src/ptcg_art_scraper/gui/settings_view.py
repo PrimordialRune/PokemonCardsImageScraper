@@ -1,11 +1,12 @@
-"""Settings page – persistent user preferences."""
+"""Settings page - persistent user preferences."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
+    QFrame,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -21,6 +23,8 @@ from PySide6.QtWidgets import (
 
 class SettingsPage(QWidget):
     """Persistent application settings backed by QSettings."""
+
+    theme_changed = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -33,7 +37,18 @@ class SettingsPage(QWidget):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        outer.addWidget(scroll)
+
+        content = QWidget(scroll)
+        scroll.setWidget(content)
+
+        root = QVBoxLayout(content)
         root.setContentsMargins(16, 16, 16, 16)
 
         form = QFormLayout()
@@ -42,7 +57,7 @@ class SettingsPage(QWidget):
         out_row = QHBoxLayout()
         self._output_dir = QLineEdit()
         self._output_dir.setPlaceholderText("Default output folder")
-        self._browse_btn = QPushButton("Browse…")
+        self._browse_btn = QPushButton("Browse...")
         self._browse_btn.clicked.connect(self._browse_output)
         out_row.addWidget(self._output_dir, stretch=1)
         out_row.addWidget(self._browse_btn)
@@ -58,21 +73,29 @@ class SettingsPage(QWidget):
         self._fmt_combo.addItems(["png", "jpeg"])
         form.addRow("Format:", self._fmt_combo)
 
+        # Theme
+        self._theme_combo = QComboBox()
+        self._theme_combo.addItem("Light", "light")
+        self._theme_combo.addItem("Dark", "dark")
+        form.addRow("Theme:", self._theme_combo)
+
         # Folder template
         self._template_edit = QLineEdit()
         self._template_edit.setPlaceholderText(
-            "e.g. {setId}/{number}_{name}.{fmt} or {basicType}/{set}/{rarity}/{number}_{name}.{fmt}"
+            "e.g. {setId}/{number}_{name}.{fmt} or "
+            "{basicType}/{set}/{rarity}/{number}_{name}.{fmt}"
         )
         form.addRow("Folder template:", self._template_edit)
         template_help = QLabel(
-            "Tokens: {set}, {setId}, {number}, {name}, {basicType}, {specificType}, {rarity}, {fmt}"
+            "Tokens: {set}, {setId}, {number}, {name}, {basicType}, "
+            "{specificType}, {rarity}, {fmt}"
         )
-        template_help.setStyleSheet("color: #888; font-size: 11px;")
+        template_help.setProperty("muted", True)
         form.addRow("", template_help)
 
         # Normalization (read-only)
-        norm_label = QLabel("750 × 1050 @ 300 DPI")
-        norm_label.setStyleSheet("color: #666;")
+        norm_label = QLabel("750 x 1050 @ 300 DPI")
+        norm_label.setProperty("muted", True)
         form.addRow("Normalization:", norm_label)
 
         # Network defaults
@@ -144,6 +167,12 @@ class SettingsPage(QWidget):
         )
         if fmt_idx >= 0:
             self._fmt_combo.setCurrentIndex(fmt_idx)
+
+        theme = str(s.value("theme", "light")).lower()
+        theme_idx = self._theme_combo.findData(theme)
+        if theme_idx >= 0:
+            self._theme_combo.setCurrentIndex(theme_idx)
+
         self._template_edit.setText(
             str(s.value("folder_template", ""))
         )
@@ -167,6 +196,8 @@ class SettingsPage(QWidget):
             "default_provider", self._provider_combo.currentText()
         )
         s.setValue("default_format", self._fmt_combo.currentText())
+        selected_theme = str(self._theme_combo.currentData() or "light")
+        s.setValue("theme", selected_theme)
         s.setValue(
             "folder_template", self._template_edit.text().strip()
         )
@@ -174,12 +205,16 @@ class SettingsPage(QWidget):
         s.setValue("rate", self._rate_spin.value())
         s.setValue("retries", self._retries_spin.value())
         s.setValue("timeout", self._timeout_spin.value())
+        self.theme_changed.emit(selected_theme)
         QMessageBox.information(self, "Settings", "Settings saved.")
 
     def _reset_defaults(self) -> None:
         self._output_dir.clear()
         self._provider_combo.setCurrentIndex(0)
         self._fmt_combo.setCurrentIndex(0)
+        theme_idx = self._theme_combo.findData("light")
+        if theme_idx >= 0:
+            self._theme_combo.setCurrentIndex(theme_idx)
         self._template_edit.clear()
         self._conc_spin.setValue(8)
         self._rate_spin.setValue(2.0)

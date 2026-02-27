@@ -13,6 +13,7 @@ from PySide6.QtCore import QSettings, Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFrame,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSlider,
     QSpinBox,
     QTabWidget,
@@ -308,7 +310,18 @@ class NewJobPage(QWidget):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        outer.addWidget(scroll)
+
+        content = QWidget(scroll)
+        scroll.setWidget(content)
+
+        root = QVBoxLayout(content)
         root.setContentsMargins(16, 16, 16, 16)
 
         # --- Source section ---
@@ -328,8 +341,8 @@ class NewJobPage(QWidget):
         search_tab = QWidget()
         sl = QVBoxLayout(search_tab)
 
-        self._guided_mode_cb = QCheckBox("Use guided filters (recommended)")
-        self._guided_mode_cb.setChecked(True)
+        self._guided_mode_cb = QCheckBox("Use guided filters for query building")
+        self._guided_mode_cb.setChecked(False)
         self._guided_mode_cb.toggled.connect(self._sync_search_mode)
         sl.addWidget(self._guided_mode_cb)
 
@@ -348,8 +361,14 @@ class NewJobPage(QWidget):
         syntax_help.setOpenExternalLinks(True)
         sl.addWidget(syntax_help)
 
-        self._guided_group = QGroupBox("Guided filters")
-        guided_layout = QFormLayout(self._guided_group)
+        self._guided_group = QGroupBox("Guided filters (advanced)")
+        self._guided_group.setCheckable(True)
+        self._guided_group.setChecked(False)
+        self._guided_group.toggled.connect(self._toggle_guided_filters)
+        guided_outer = QVBoxLayout(self._guided_group)
+        self._guided_content = QWidget(self._guided_group)
+        guided_outer.addWidget(self._guided_content)
+        guided_layout = QFormLayout(self._guided_content)
 
         self._guided_name_edit = QLineEdit()
         self._guided_name_edit.setPlaceholderText("e.g. Charizard ex 100/197")
@@ -633,7 +652,7 @@ class NewJobPage(QWidget):
         out_layout.addRow("Folder:", out_row)
 
         self._naming_preview = QLabel("…/SetName/001_CardName.png")
-        self._naming_preview.setStyleSheet("color: #888;")
+        self._naming_preview.setProperty("muted", True)
         out_layout.addRow("Preview:", self._naming_preview)
 
         self._fmt_combo = QComboBox()
@@ -652,7 +671,7 @@ class NewJobPage(QWidget):
         tmpl_help = QLabel(
             "Tokens: {set}, {setId}, {number}, {name}, {basicType}, {specificType}, {rarity}, {fmt}"
         )
-        tmpl_help.setStyleSheet("color: #888; font-size: 11px;")
+        tmpl_help.setProperty("muted", True)
         out_layout.addRow("", tmpl_help)
 
         self._overwrite_cb = QCheckBox("Overwrite existing files")
@@ -723,6 +742,7 @@ class NewJobPage(QWidget):
         root.addWidget(self._build_btn)
 
         self._update_guided_query_preview()
+        self._toggle_guided_filters(self._guided_group.isChecked())
         self._sync_search_mode(self._guided_mode_cb.isChecked())
 
         root.addStretch()
@@ -887,10 +907,16 @@ class NewJobPage(QWidget):
         if self._guided_mode_cb.isChecked():
             self._search_query.setText(query)
 
+    def _toggle_guided_filters(self, expanded: bool) -> None:
+        self._guided_content.setVisible(expanded)
+        if not expanded and self._guided_mode_cb.isChecked():
+            self._guided_mode_cb.setChecked(False)
+
     def _sync_search_mode(self, checked: bool) -> None:
-        self._guided_group.setEnabled(checked)
         self._search_query.setEnabled(not checked)
         if checked:
+            if not self._guided_group.isChecked():
+                self._guided_group.setChecked(True)
             self._update_guided_query_preview()
 
     def _copy_guided_query_to_manual(self) -> None:
@@ -903,6 +929,7 @@ class NewJobPage(QWidget):
             )
 
     def _apply_ex_era_preset(self) -> None:
+        self._guided_group.setChecked(True)
         self._guided_mode_cb.setChecked(True)
         self._guided_name_edit.clear()
         self._guided_text_edit.clear()

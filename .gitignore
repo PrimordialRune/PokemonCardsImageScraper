@@ -1,5 +1,7 @@
 # Output directories - card images
 output/
+out/
+out_old/
 cards/
 art_only/
 test_output/

@@ -176,6 +176,12 @@ class TestExpandTemplate:
         result = expand_template(tmpl, self._asset(), fmt="png")
         assert result == "stage-2/charizard-ex.png"
 
+    def test_set_token_falls_back_to_set_id(self):
+        tmpl = "{set}/{number}_{name}.{fmt}"
+        asset = self._asset(set_name="", set_code="sv4")
+        result = expand_template(tmpl, asset, fmt="png")
+        assert result == "sv4/100_charizard-ex.png"
+
 
 class TestTemplateOutputPath:
     def test_with_template(self):

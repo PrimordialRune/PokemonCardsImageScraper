@@ -18,7 +18,7 @@ _TOKEN_RE = re.compile(r"\{(\w+)\}")
 def _token_map(asset: CardAsset, fmt: str = "png") -> dict[str, str]:
     """Build a mapping from token names to slugified values."""
     return {
-        "set": slugify(asset.set_name or "unknown-set"),
+        "set": slugify(asset.set_name or asset.set_code or "unknown-set"),
         "setId": slugify(asset.set_code or asset.set_name or "unknown-set"),
         "number": slugify(asset.number) if asset.number else "000",
         "name": slugify(asset.name or "card"),
