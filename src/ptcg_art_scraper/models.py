@@ -101,6 +101,7 @@ class SidecarMetadata:
     resistances: dict = field(default_factory=dict)
     retreatCost: int = 0
     normalized_output_path: str = ""
+    image_variant: str = ""
     warnings: list[str] = field(default_factory=list)
 
     @staticmethod

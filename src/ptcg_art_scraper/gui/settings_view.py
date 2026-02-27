@@ -65,7 +65,7 @@ class SettingsPage(QWidget):
 
         # Default provider
         self._provider_combo = QComboBox()
-        self._provider_combo.addItems(["pkmncards"])
+        self._provider_combo.addItems(["pkmncards", "pokemontcgio_images"])
         form.addRow("Provider:", self._provider_combo)
 
         # Default format
