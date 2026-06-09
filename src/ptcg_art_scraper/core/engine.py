@@ -26,6 +26,7 @@ from ptcg_art_scraper.core.models import (
 from ptcg_art_scraper.image.normalize import normalize_image
 from ptcg_art_scraper.models import CardRef, SidecarMetadata
 from ptcg_art_scraper.net.http import DEFAULT_HEADERS, RateLimiter
+from ptcg_art_scraper.providers import get_provider
 from ptcg_art_scraper.storage.layout import card_output_path, sidecar_path, template_output_path
 from ptcg_art_scraper.storage.metadata import save_sidecar
 
@@ -36,15 +37,7 @@ EventCallback = Callable[[JobEvent], None]
 
 def _get_provider(name: str):
     """Resolve provider by name."""
-    if name == "pkmncards":
-        from ptcg_art_scraper.providers.pkmncards import PkmnCardsProvider
-
-        return PkmnCardsProvider()
-    if name == "pokemontcgio_images":
-        from ptcg_art_scraper.providers.pokemontcgio_images import PokemonTcgioImagesProvider
-
-        return PokemonTcgioImagesProvider()
-    raise ValueError(f"Unknown provider: {name!r}")
+    return get_provider(name)
 
 
 def _decode_ref_metadata(card_id: str) -> dict[str, str]:

@@ -8,7 +8,7 @@ A CLI tool that scrapes Pokémon card images (from [pkmncards.com](https://pkmnc
 
 ## Features
 
-* **Provider architecture** – pluggable providers (`pkmncards` today; add more later).
+* **Provider architecture** – pluggable providers including `pkmncards`, `pokemontcgio_images`, and `pokemon_official`.
 * **Image normalization** – cover-fit → centre-crop → Lanczos resampling → DPI embed.
 * **Batch processing** – async downloads, bounded concurrency, token-bucket rate limiting.
 * **Retries with exponential back-off** on 429 / 5xx / timeouts.
@@ -38,6 +38,9 @@ ptcg_art_scraper scrape --out ./cards --input cards_to_fetch.csv --concurrency 6
 
 # Limit results
 ptcg_art_scraper scrape --out ./cards --query "Pikachu" --limit 5
+
+# Deterministic official asset lookup
+ptcg_art_scraper scrape --out ./cards --provider pokemon_official --set EX6 --query 10
 ```
 
 ### Normalize existing images
@@ -98,7 +101,7 @@ The resulting executable will be in `dist/`.
 
 | Option | Default | Description |
 |---|---|---|
-| `--provider` | `pkmncards` | Image provider |
+| `--provider` | `pkmncards` | Image provider (`pkmncards`, `pokemontcgio_images`, or `pokemon_official`) |
 | `--out` | *(required)* | Output directory |
 | `--query` | | Search query |
 | `--input` | | File with card identifiers/URLs |
@@ -122,6 +125,11 @@ If you use `--provider pokemontcgio_images`, place a local clone/download of
   sets/en.json
   cards/en/*.json
 ```
+
+### Deterministic official assets for `pokemon_official`
+
+`pokemon_official` builds image URLs directly from `--set` plus `--query` (card number)
+using the official Pokemon assets pattern, so it does not perform any metadata discovery.
 
 ## Output structure
 
@@ -184,7 +192,9 @@ src/ptcg_art_scraper/
 │   └── help_view.py       # Help / About page
 ├── providers/
 │   ├── base.py            # Abstract provider interface
-│   └── pkmncards.py       # pkmncards.com provider
+│   ├── pkmncards.py       # pkmncards.com provider
+│   ├── pokemontcgio_images.py  # images.pokemontcg.io provider
+│   └── pokemon_official.py  # official Pokemon asset URL provider
 ├── image/
 │   └── normalize.py       # 750×1050 @ 300 DPI pipeline
 ├── storage/

@@ -14,6 +14,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ptcg_art_scraper.image.normalize import normalize_image, verify_image
 from ptcg_art_scraper.models import SidecarMetadata
+from ptcg_art_scraper.providers import get_provider
 from ptcg_art_scraper.storage.layout import card_output_path, sidecar_path, template_output_path
 from ptcg_art_scraper.storage.metadata import save_sidecar
 
@@ -36,15 +37,10 @@ def _setup_logging(verbose: bool = False) -> None:
 
 def _get_provider(name: str):
     """Resolve provider by name."""
-    if name == "pkmncards":
-        from ptcg_art_scraper.providers.pkmncards import PkmnCardsProvider
-
-        return PkmnCardsProvider()
-    if name == "pokemontcgio_images":
-        from ptcg_art_scraper.providers.pokemontcgio_images import PokemonTcgioImagesProvider
-
-        return PokemonTcgioImagesProvider()
-    raise typer.BadParameter(f"Unknown provider: {name!r}")
+    try:
+        return get_provider(name)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 def _load_input_file(path: Path) -> list[str]:

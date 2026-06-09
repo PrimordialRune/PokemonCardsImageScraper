@@ -15,6 +15,10 @@ class BaseProvider(abc.ABC):
 
     name: str = "base"
 
+    def get_image_url(self, set_code: str, card_number: str) -> str | None:
+        """Deterministically resolve a card image URL when supported."""
+        return None
+
     @abc.abstractmethod
     async def search(
         self,
