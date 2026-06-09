@@ -91,6 +91,17 @@ class PokemonTcgioImagesProvider(BaseProvider):
         self._index = index or PokemonTcgDataIndexClient()
         self._prefer_hires = prefer_hires
 
+    def get_image_url(self, set_code: str, card_number: str) -> str | None:
+        cleaned_set = str(set_code).strip()
+        cleaned_number = str(card_number).strip()
+        if not cleaned_set:
+            logger.info("%s failed deterministically: missing set code", self.name)
+            return None
+        if not cleaned_number:
+            logger.info("%s failed deterministically: missing card number", self.name)
+            return None
+        return image_url(cleaned_set, cleaned_number, hires=self._prefer_hires)
+
     # -- BaseProvider interface ---------------------------------------------
 
     async def search(
