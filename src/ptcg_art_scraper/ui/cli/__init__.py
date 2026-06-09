@@ -1,4 +1,4 @@
-"""Compatibility entry-point for the redesigned CLI."""
+"""CLI package."""
 
 from ptcg_art_scraper.ui.cli.app import app
 

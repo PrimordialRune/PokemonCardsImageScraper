@@ -1,4 +1,4 @@
-"""Job, queue-item, and event models used by both CLI and GUI."""
+"""Job, queue-item, and event models used by the legacy GUI bridge."""
 
 from __future__ import annotations
 
@@ -7,10 +7,6 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
-
-# ---------------------------------------------------------------------------
-# Queue-item status
-# ---------------------------------------------------------------------------
 
 
 class ItemStatus(enum.Enum):
@@ -21,11 +17,6 @@ class ItemStatus(enum.Enum):
     SAVED = "saved"
     SKIPPED = "skipped"
     FAILED = "failed"
-
-
-# ---------------------------------------------------------------------------
-# Event types
-# ---------------------------------------------------------------------------
 
 
 class EventType(enum.Enum):
@@ -42,15 +33,8 @@ class EventType(enum.Enum):
     LOG = "log"
 
 
-# ---------------------------------------------------------------------------
-# Data classes
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class JobConfig:
-    """All parameters needed to run a scrape job."""
-
     provider: str = "pkmncards"
     output_dir: str = ""
     fmt: str = "png"
@@ -67,8 +51,6 @@ class JobConfig:
 
 @dataclass
 class QueueItem:
-    """A single card in the job queue."""
-
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     identifier: str = ""
     name: str = ""
@@ -91,8 +73,6 @@ class QueueItem:
 
 @dataclass
 class JobEvent:
-    """An event emitted by the scrape engine."""
-
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     item_id: str = ""
     event_type: EventType = EventType.LOG
@@ -107,8 +87,6 @@ class JobEvent:
 
 @dataclass
 class JobSummary:
-    """Final summary of a scrape job."""
-
     total: int = 0
     succeeded: int = 0
     skipped: int = 0
