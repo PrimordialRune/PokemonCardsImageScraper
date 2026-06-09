@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import asdict
 from json import JSONDecodeError
@@ -10,6 +11,8 @@ from pathlib import Path
 
 from ptcg_art_scraper.core.models import CardAsset, SidecarMetadata
 from ptcg_art_scraper.utils.slugify import slugify
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TEMPLATE = "{setId}/{number}_{name}.{fmt}"
 _TOKEN_RE = re.compile(r"\{(\w+)\}")
@@ -70,5 +73,6 @@ def load_sidecar(path: Path) -> SidecarMetadata | None:
         return None
     try:
         return SidecarMetadata(**json.loads(path.read_text(encoding="utf-8")))
-    except (JSONDecodeError, OSError, TypeError):
+    except (JSONDecodeError, OSError, TypeError) as exc:
+        logger.warning("Could not load sidecar %s: %s", path, exc)
         return None

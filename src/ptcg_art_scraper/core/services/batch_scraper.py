@@ -135,9 +135,7 @@ class BatchScrapeService:
                         sha256_original=meta["sha256_original"],
                         sha256_normalized=meta["sha256_normalized"],
                         normalized_output_path=str(output_path),
-                        image_variant=(
-                            "hires" if "_hires.png" in fetched.source_url else "standard"
-                        ),
+                        image_variant=self._image_variant(resolved.provider, fetched.source_url),
                     ),
                     sidecar,
                 )
@@ -190,6 +188,12 @@ class BatchScrapeService:
                 debug_message=str(exc),
             ) from exc
         return FetchedImage(data=data, source_url=resolved.resolved_url)
+
+
+    def _image_variant(self, provider: str, source_url: str) -> str:
+        if provider == "pokemontcgio_images":
+            return "hires" if source_url.endswith("_hires.png") else "standard"
+        return "standard"
 
     def _output_path(self, asset) -> Path:
         if self.config.folder_template:

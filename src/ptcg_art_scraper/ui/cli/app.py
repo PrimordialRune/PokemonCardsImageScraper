@@ -52,6 +52,15 @@ def _parse_provider_priority(raw: str) -> tuple[str, ...]:
     return names
 
 
+def _normalize_format(value: str) -> str:
+    normalized = value.lower()
+    if normalized == "jpeg":
+        normalized = "jpg"
+    if normalized not in {"png", "jpg"}:
+        raise typer.BadParameter("--format must be png or jpg")
+    return normalized
+
+
 def _collect_cards(
     card_set: str,
     numbers: str | None,
@@ -173,11 +182,7 @@ def scrape(
 ) -> None:
     """Batch resolve, download, and normalize card images."""
     _setup_logging(verbose)
-    normalized_format = image_format.lower()
-    if normalized_format == "jpeg":
-        normalized_format = "jpg"
-    if normalized_format not in {"png", "jpg"}:
-        raise typer.BadParameter("--format must be png or jpg")
+    normalized_format = _normalize_format(image_format)
 
     try:
         cards = _collect_cards(card_set, numbers, input_path)
@@ -260,15 +265,25 @@ def normalize(
     if not input_path.is_dir():
         console.print(f"[red][FAIL][/red] {input_path} is not a directory.")
         raise typer.Exit(1)
-    fmt = "jpg" if image_format.lower() == "jpeg" else image_format.lower()
+    fmt = _normalize_format(image_format)
     out.mkdir(parents=True, exist_ok=True)
     count = 0
+    failed = 0
     for image_path in sorted(input_path.iterdir()):
         if image_path.suffix.lower() not in IMAGE_EXTENSIONS:
             continue
-        normalize_image(image_path.read_bytes(), out / f"{image_path.stem}.{fmt}", fmt=fmt)
-        count += 1
-    console.print(f"[green][OK][/green] Normalized {count} image(s) -> {out}")
+        try:
+            normalize_image(image_path.read_bytes(), out / f"{image_path.stem}.{fmt}", fmt=fmt)
+            count += 1
+        except (OSError, ValueError) as exc:
+            failed += 1
+            console.print(f"[red][FAIL][/red] {image_path.name}: {exc}")
+    console.print(
+        f"[green][OK][/green] Normalized {count} image(s) -> {out}"
+        + (f"; {failed} failed" if failed else "")
+    )
+    if failed:
+        raise typer.Exit(1)
 
 
 @app.command()

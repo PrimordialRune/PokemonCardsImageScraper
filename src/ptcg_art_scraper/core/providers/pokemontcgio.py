@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import httpx
 
 from ptcg_art_scraper.core.models import CardAsset, CardIdentifier, ProviderCandidate
@@ -13,6 +15,8 @@ from ptcg_art_scraper.providers.pokemontcgio_images import (
     _specific_type_from_subtypes,
     image_url,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PokemonTcgioProvider(ImageProvider):
@@ -50,7 +54,18 @@ class PokemonTcgioProvider(ImageProvider):
             asset.basic_type = _basic_type_from_supertype(entry.supertype)
             asset.specific_type = _specific_type_from_subtypes(entry.subtypes)
             asset.evolves_from = entry.evolves_from
-            asset.hp = int(entry.hp) if entry.hp.isdigit() else 0
+            if entry.hp.isdigit():
+                asset.hp = int(entry.hp)
+            elif entry.hp:
+                logger.warning(
+                    "Unexpected HP value %r for %s #%s",
+                    entry.hp,
+                    card.set_code,
+                    card.card_number,
+                )
+                asset.hp = 0
+            else:
+                asset.hp = 0
             asset.color = entry.types[0] if entry.types else ""
             break
 

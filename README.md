@@ -59,7 +59,7 @@ ptcg_art_scraper scrape \
 
 Supported input formats:
 
-- **TXT**: one `SET#NUMBER` entry per line, or plain numbers when `--set` is supplied.
+- **TXT**: one `SET#NUMBER` or `SET,NUMBER` entry per line, or plain numbers when `--set` is supplied.
 - **CSV**: `set`/`set_code` plus `number`/`card_number` columns.
 - **JSON**: a list of `"SET#NUMBER"` strings or objects with `set`/`set_code` and `number`/`card_number`.
 
