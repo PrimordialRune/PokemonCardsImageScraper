@@ -44,7 +44,12 @@ def card_output_path(base_dir: Path, asset: CardAsset, fmt: str = "png") -> Path
     return base_dir / set_slug / f"{number}_{name_slug}.{fmt}"
 
 
-def template_output_path(base_dir: Path, asset: CardAsset, fmt: str = "png", template: str = "") -> Path:
+def template_output_path(
+    base_dir: Path,
+    asset: CardAsset,
+    fmt: str = "png",
+    template: str = "",
+) -> Path:
     if not template:
         return card_output_path(base_dir, asset, fmt=fmt)
     return base_dir / expand_template(template, asset, fmt=fmt)

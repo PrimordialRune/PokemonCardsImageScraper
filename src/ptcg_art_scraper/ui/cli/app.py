@@ -69,10 +69,20 @@ def _collect_cards(
 
 def _print_attempts(service: ImageResolutionService) -> None:
     for attempt in service.last_attempts:
-        style = "green" if attempt.status == "ok" else "yellow" if attempt.status == "miss" else "red"
+        if attempt.status == "ok":
+            style = "green"
+            label = "OK"
+        elif attempt.status == "miss":
+            style = "yellow"
+            label = "TRY"
+        else:
+            style = "red"
+            label = "ERR"
         detail = f" {attempt.detail}" if attempt.detail else ""
         url = f"\n      URL: {attempt.url}" if attempt.url else ""
-        console.print(f"[{style}][{'OK' if attempt.status == 'ok' else 'TRY' if attempt.status == 'miss' else 'ERR'}][/{style}] {attempt.provider}{detail}{url}")
+        console.print(
+            f"[{style}][{label}][/{style}] {attempt.provider}{detail}{url}"
+        )
 
 
 @app.command()
@@ -82,7 +92,6 @@ def resolve(
     providers: Annotated[
         str,
         typer.Option(
-            "pokemon_official,pokemontcgio_images,pkmncards",
             "--providers",
             help="Comma-separated provider priority.",
         ),
@@ -106,7 +115,8 @@ def resolve(
             rate=rate,
         )
     )
-    resolved = asyncio.run(service.resolve_card(CardIdentifier(set_code=card_set, card_number=number)))
+    card = CardIdentifier(set_code=card_set, card_number=number)
+    resolved = asyncio.run(service.resolve_card(card))
     _print_attempts(service)
     if resolved is None:
         console.print("[red][FAIL][/red] No provider resolved a usable image URL.")
@@ -136,7 +146,6 @@ def scrape(
     providers: Annotated[
         str,
         typer.Option(
-            "pokemon_official,pokemontcgio_images,pkmncards",
             "--providers",
             help="Comma-separated provider priority.",
         ),
@@ -206,7 +215,10 @@ def scrape(
         if event_name == "item.started":
             console.print(f"[cyan][INFO][/cyan] Resolving {payload['card']}")
         elif event_name == "item.resolved":
-            console.print(f"[green][OK][/green]  Provider: {payload['provider']}\n      URL: {payload['url']}")
+            console.print(
+                f"[green][OK][/green]  Provider: {payload['provider']}\n"
+                f"      URL: {payload['url']}"
+            )
         elif event_name == "item.skipped":
             console.print(f"[yellow][SKIP][/yellow] {payload['card']} -> {payload['output_path']}")
             progress.advance(task_id)
@@ -258,7 +270,9 @@ def normalize(
 @app.command()
 def verify(
     input_path: Annotated[Path, typer.Option("--input", help="Folder of images to verify.")],
-    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show passing files too.")] = False,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-v", help="Show passing files too.")
+    ] = False,
 ) -> None:
     """Verify normalized image dimensions and DPI metadata."""
     _setup_logging(verbose)

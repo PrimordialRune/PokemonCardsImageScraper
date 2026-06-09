@@ -10,7 +10,7 @@ from typing import Callable
 import httpx
 
 from ptcg_art_scraper.core.config import BatchScrapeConfig, ResolverConfig
-from ptcg_art_scraper.core.exceptions import DownloadError, ResolutionError
+from ptcg_art_scraper.core.exceptions import DownloadError
 from ptcg_art_scraper.core.models import (
     BatchItemResult,
     BatchSummary,
@@ -19,8 +19,8 @@ from ptcg_art_scraper.core.models import (
     ResolvedImage,
     SidecarMetadata,
 )
-from ptcg_art_scraper.core.services.image_resolution import ImageResolutionService
 from ptcg_art_scraper.core.services.image_pipeline import normalize_image
+from ptcg_art_scraper.core.services.image_resolution import ImageResolutionService
 from ptcg_art_scraper.core.services.output import (
     card_output_path,
     save_sidecar,
@@ -185,7 +185,10 @@ class BatchScrapeService:
                 rate_limiter=limiter,
             )
         except Exception as exc:  # noqa: BLE001
-            raise DownloadError("Failed to download the resolved image.", debug_message=str(exc)) from exc
+            raise DownloadError(
+                "Failed to download the resolved image.",
+                debug_message=str(exc),
+            ) from exc
         return FetchedImage(data=data, source_url=resolved.resolved_url)
 
     def _output_path(self, asset) -> Path:

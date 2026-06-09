@@ -28,7 +28,8 @@ class ImageResolutionService:
         self.last_attempts: list[ProviderAttempt] = []
 
     def resolve(self, set_code: str, card_number: str) -> str | None:
-        resolved = asyncio.run(self._resolve(CardIdentifier(set_code=set_code, card_number=card_number)))
+        card = CardIdentifier(set_code=set_code, card_number=card_number)
+        resolved = asyncio.run(self._resolve(card))
         return resolved.resolved_url if resolved else None
 
     async def resolve_card(self, card: CardIdentifier) -> ResolvedImage | None:
@@ -55,7 +56,11 @@ class ImageResolutionService:
                     continue
                 if candidate is None:
                     self.last_attempts.append(
-                        ProviderAttempt(provider=provider_name, status="miss", detail="No candidate")
+                        ProviderAttempt(
+                            provider=provider_name,
+                            status="miss",
+                            detail="No candidate",
+                        )
                     )
                     continue
                 resolved_url = await self._select_url(client, candidate, limiter)
@@ -79,7 +84,11 @@ class ImageResolutionService:
                     url=resolved_url,
                 )
                 self.last_attempts.append(attempt)
-                return ResolvedImage(card=card, asset=candidate.asset, attempts=list(self.last_attempts))
+                return ResolvedImage(
+                    card=card,
+                    asset=candidate.asset,
+                    attempts=list(self.last_attempts),
+                )
         return None
 
     async def _select_url(

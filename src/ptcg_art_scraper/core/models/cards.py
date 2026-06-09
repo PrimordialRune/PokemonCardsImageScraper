@@ -142,7 +142,7 @@ class SidecarMetadata:
             weaknesses=dict(asset.weaknesses),
             resistances=dict(asset.resistances),
             retreatCost=asset.retreat_cost,
-            **kwargs,
+            **kwargs,  # type: ignore[arg-type]
         )
 
 
