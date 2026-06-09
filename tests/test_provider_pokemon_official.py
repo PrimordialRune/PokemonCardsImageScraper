@@ -9,6 +9,7 @@ import pytest
 
 from ptcg_art_scraper.cli import _get_provider as cli_get_provider
 from ptcg_art_scraper.core.engine import _get_provider as engine_get_provider
+from ptcg_art_scraper.models import CardRef
 from ptcg_art_scraper.providers import PROVIDER_PRIORITY, resolve_image_url
 from ptcg_art_scraper.providers.pokemon_official import (
     PokemonOfficialAssetProvider,
@@ -106,9 +107,10 @@ class TestProvider:
             "https://assets.pokemon.com/static-assets/content-assets/"
             "cms2/img/cards/web/EX6/EX6_EN_10.png"
         )
+        ref = CardRef(provider=provider.name, url=url)
 
         async with httpx.AsyncClient() as client:
-            asset = await provider.resolve(client, ref=provider._build_ref("EX6", "10", url=url))
+            asset = await provider.resolve(client, ref=ref)
 
         assert asset.set_code == "EX6"
         assert asset.number == "10"
