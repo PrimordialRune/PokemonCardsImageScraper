@@ -847,7 +847,8 @@ class PkmnCardsProvider(BaseProvider):
     def get_image_url(self, set_code: str, card_number: str) -> str | None:
         del set_code, card_number
         logger.info(
-            "%s failed deterministically: card URLs require search/discovery and cannot be constructed",
+            "%s failed deterministically: card URLs require search/discovery "
+            "and cannot be constructed",
             self.name,
         )
         return None

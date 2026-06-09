@@ -113,12 +113,18 @@ class PokemonOfficialAssetProvider(BaseProvider):
         if not set_code or not number:
             parsed = parse_image_url(ref.url)
             if parsed is None:
-                raise ValueError("Official Pokemon asset references require a valid set code and card number")
+                raise ValueError(
+                    "Official Pokemon asset references require "
+                    "a valid set code and card number"
+                )
             set_code, number = parsed
 
         url = self.get_image_url(set_code, number)
         if url is None:
-            raise ValueError("Official Pokemon asset references require a valid set code and card number")
+            raise ValueError(
+                "Official Pokemon asset references require "
+                "a valid set code and card number"
+            )
 
         return CardAsset(
             name=f"{set_code}-{number}",
