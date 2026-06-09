@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import asdict
+from json import JSONDecodeError
 from pathlib import Path
 
 from ptcg_art_scraper.core.models import CardAsset, SidecarMetadata
@@ -69,5 +70,5 @@ def load_sidecar(path: Path) -> SidecarMetadata | None:
         return None
     try:
         return SidecarMetadata(**json.loads(path.read_text(encoding="utf-8")))
-    except Exception:
+    except (JSONDecodeError, OSError, TypeError):
         return None

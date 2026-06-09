@@ -150,7 +150,9 @@ def scrape(
             help="Comma-separated provider priority.",
         ),
     ] = ",".join(DEFAULT_PROVIDER_PRIORITY),
-    format: Annotated[str, typer.Option("--format", help="png or jpg output.")] = "png",
+    image_format: Annotated[
+        str, typer.Option("--format", help="png or jpg output.")
+    ] = "png",
     concurrency: Annotated[int, typer.Option(help="Concurrent downloads.")] = 6,
     rate: Annotated[float, typer.Option(help="Shared provider/download rate.")] = 2.0,
     retries: Annotated[int, typer.Option(help="Download retry count.")] = 3,
@@ -171,7 +173,7 @@ def scrape(
 ) -> None:
     """Batch resolve, download, and normalize card images."""
     _setup_logging(verbose)
-    normalized_format = format.lower()
+    normalized_format = image_format.lower()
     if normalized_format == "jpeg":
         normalized_format = "jpg"
     if normalized_format not in {"png", "jpg"}:
@@ -248,7 +250,9 @@ def scrape(
 def normalize(
     input_path: Annotated[Path, typer.Option("--input", help="Folder of images to normalize.")],
     out: Annotated[Path, typer.Option("--out", help="Output directory for normalized images.")],
-    format: Annotated[str, typer.Option("--format", help="png or jpg output.")] = "png",
+    image_format: Annotated[
+        str, typer.Option("--format", help="png or jpg output.")
+    ] = "png",
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable debug logging.")] = False,
 ) -> None:
     """Normalize existing images to 750x1050 at 300 DPI."""
@@ -256,7 +260,7 @@ def normalize(
     if not input_path.is_dir():
         console.print(f"[red][FAIL][/red] {input_path} is not a directory.")
         raise typer.Exit(1)
-    fmt = "jpg" if format.lower() == "jpeg" else format.lower()
+    fmt = "jpg" if image_format.lower() == "jpeg" else image_format.lower()
     out.mkdir(parents=True, exist_ok=True)
     count = 0
     for image_path in sorted(input_path.iterdir()):

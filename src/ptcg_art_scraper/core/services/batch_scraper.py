@@ -158,7 +158,7 @@ class BatchScrapeService:
                     sidecar_path=str(sidecar),
                     attempts=resolved.attempts,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except (DownloadError, OSError, RuntimeError, ValueError) as exc:
                 logger.exception("Failed processing %s", card.label)
                 message = str(exc)
                 on_event("item.failed", {"card": card.label, "error": message})
@@ -184,7 +184,7 @@ class BatchScrapeService:
                 retries=self.config.retries,
                 rate_limiter=limiter,
             )
-        except Exception as exc:  # noqa: BLE001
+        except (httpx.HTTPError, RuntimeError) as exc:
             raise DownloadError(
                 "Failed to download the resolved image.",
                 debug_message=str(exc),

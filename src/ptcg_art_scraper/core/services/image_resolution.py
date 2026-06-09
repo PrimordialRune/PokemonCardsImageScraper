@@ -48,7 +48,7 @@ class ImageResolutionService:
                 logger.info("Trying provider %s for %s", provider_name, card.label)
                 try:
                     candidate = await provider.resolve(client, card, rate_limiter=limiter)
-                except Exception as exc:  # noqa: BLE001
+                except (httpx.HTTPError, OSError, RuntimeError, ValueError) as exc:
                     logger.exception("Provider %s failed for %s", provider_name, card.label)
                     self.last_attempts.append(
                         ProviderAttempt(provider=provider_name, status="error", detail=str(exc))
