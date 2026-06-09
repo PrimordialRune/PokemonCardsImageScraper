@@ -14,11 +14,13 @@ from ptcg_art_scraper.core.exceptions import DownloadError
 from ptcg_art_scraper.core.models import (
     BatchItemResult,
     BatchSummary,
+    CardAsset,
     CardIdentifier,
     FetchedImage,
     ResolvedImage,
     SidecarMetadata,
 )
+from ptcg_art_scraper.core.providers import PROVIDER_POKEMONTCGIO_IMAGES
 from ptcg_art_scraper.core.services.image_pipeline import normalize_image
 from ptcg_art_scraper.core.services.image_resolution import ImageResolutionService
 from ptcg_art_scraper.core.services.output import (
@@ -191,11 +193,11 @@ class BatchScrapeService:
 
 
     def _image_variant(self, provider: str, source_url: str) -> str:
-        if provider == "pokemontcgio_images":
+        if provider == PROVIDER_POKEMONTCGIO_IMAGES:
             return "hires" if source_url.endswith("_hires.png") else "standard"
         return "standard"
 
-    def _output_path(self, asset) -> Path:
+    def _output_path(self, asset: CardAsset) -> Path:
         if self.config.folder_template:
             return template_output_path(
                 self.config.output_dir,

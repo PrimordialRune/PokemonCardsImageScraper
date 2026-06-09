@@ -34,7 +34,7 @@ Example output:
 
 ```text
 [INFO] Resolving EX6 #10
-[OK]  pokemon_official Resolved
+[OK]  Provider: pokemon_official
       URL: https://assets.pokemon.com/...
 [OK] Provider: pokemon_official
 URL: https://assets.pokemon.com/...

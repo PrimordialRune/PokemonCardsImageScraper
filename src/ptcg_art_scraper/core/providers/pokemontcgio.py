@@ -64,8 +64,6 @@ class PokemonTcgioProvider(ImageProvider):
                     card.card_number,
                 )
                 asset.hp = 0
-            else:
-                asset.hp = 0
             asset.color = entry.types[0] if entry.types else ""
             break
 

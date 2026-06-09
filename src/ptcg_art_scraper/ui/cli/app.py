@@ -188,10 +188,10 @@ def scrape(
         cards = _collect_cards(card_set, numbers, input_path)
     except InputFormatError as exc:
         console.print(f"[red][FAIL][/red] {exc.user_message}")
-        raise typer.Exit(1) from None
+        raise typer.Exit(1) from exc
     except ScraperError as exc:
         console.print(f"[red][FAIL][/red] {exc.user_message}")
-        raise typer.Exit(1) from None
+        raise typer.Exit(1) from exc
 
     service = BatchScrapeService(
         BatchScrapeConfig(
@@ -219,6 +219,7 @@ def scrape(
     task_id = progress.add_task("Scraping cards", total=len(cards))
 
     def _on_event(event_name: str, payload: dict[str, str]) -> None:
+        """Render batch-service event payloads into rich CLI output."""
         if event_name == "item.started":
             console.print(f"[cyan][INFO][/cyan] Resolving {payload['card']}")
         elif event_name == "item.resolved":
@@ -325,5 +326,5 @@ def gui() -> None:
             f"[red][FAIL][/red] GUI dependencies are not installed: {exc}\n"
             "Install with: pip install ptcg-art-scraper[gui]"
         )
-        raise typer.Exit(1) from None
+        raise typer.Exit(1) from exc
     raise SystemExit(launch())

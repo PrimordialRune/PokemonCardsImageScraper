@@ -9,16 +9,20 @@ from ptcg_art_scraper.core.providers.official import PokemonOfficialProvider
 from ptcg_art_scraper.core.providers.pkmncards import PkmnCardsResolutionProvider
 from ptcg_art_scraper.core.providers.pokemontcgio import PokemonTcgioProvider
 
+PROVIDER_POKEMON_OFFICIAL = "pokemon_official"
+PROVIDER_POKEMONTCGIO_IMAGES = "pokemontcgio_images"
+PROVIDER_PKMNCARDS = "pkmncards"
+
 DEFAULT_PROVIDER_PRIORITY = (
-    "pokemon_official",
-    "pokemontcgio_images",
-    "pkmncards",
+    PROVIDER_POKEMON_OFFICIAL,
+    PROVIDER_POKEMONTCGIO_IMAGES,
+    PROVIDER_PKMNCARDS,
 )
 
 _PROVIDER_FACTORIES: dict[str, Callable[[], ImageProvider]] = {
-    "pokemon_official": PokemonOfficialProvider,
-    "pokemontcgio_images": PokemonTcgioProvider,
-    "pkmncards": PkmnCardsResolutionProvider,
+    PROVIDER_POKEMON_OFFICIAL: PokemonOfficialProvider,
+    PROVIDER_POKEMONTCGIO_IMAGES: PokemonTcgioProvider,
+    PROVIDER_PKMNCARDS: PkmnCardsResolutionProvider,
 }
 
 
