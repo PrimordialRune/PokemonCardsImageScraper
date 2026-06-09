@@ -1,20 +1,16 @@
 # Pokémon TCG Card Image Scraper
 
-A CLI tool that scrapes Pokémon card images (from [pkmncards.com](https://pkmncards.com) and other providers) and produces **standardised, print-ready** images:
-
-* **750 × 1050 px** (2.5 × 3.5 in at 300 DPI)
-* Embedded 300 DPI metadata
-* Sidecar JSON with provenance, hashes, and sizing data
+A batch-first CLI for resolving, downloading, and normalizing Pokémon card images into
+**750 × 1050 px** artwork files with **300 DPI** metadata and JSON sidecars.
 
 ## Features
 
-* **Provider architecture** – pluggable providers including `pkmncards`, `pokemontcgio_images`, and `pokemon_official`.
-* **Image normalization** – cover-fit → centre-crop → Lanczos resampling → DPI embed.
-* **Batch processing** – async downloads, bounded concurrency, token-bucket rate limiting.
-* **Retries with exponential back-off** on 429 / 5xx / timeouts.
-* **Resume support** – skip already-downloaded images by checking output + sidecar JSON.
-* **Verify command** – audit an output folder for size / DPI / corruption issues.
-* **Structured output** – `{set_slug}/{number}_{name_slug}.png` + `.json` sidecar.
+- **Layered architecture** with dedicated `core/config`, `core/models`, `core/providers`, and `core/services` packages.
+- **Central image resolution service** that applies provider priority, fallback, and trace logging in one place.
+- **Standardized providers** for `pokemon_official`, `pokemontcgio_images`, and `pkmncards`.
+- **Rich CLI output** with explicit resolution visibility, batch progress, and concise summaries.
+- **Deterministic batch workflows** for set-based scraping from flags, TXT, CSV, or JSON input files.
+- **Print-ready normalization** with sidecar metadata and output templating.
 
 ## Installation
 
@@ -25,23 +21,47 @@ pip install -e ".[dev]"
 
 Dependencies: Python ≥ 3.11, httpx, typer, beautifulsoup4, Pillow, rich.
 
-## Usage
+## CLI usage
 
-### Scrape cards
+### Resolve a single card
 
 ```bash
-# Single card search
-ptcg_art_scraper scrape --out ./cards --query "Charizard ex 100/197"
-
-# From a text/CSV/JSON list
-ptcg_art_scraper scrape --out ./cards --input cards_to_fetch.csv --concurrency 6 --rate 1.5
-
-# Limit results
-ptcg_art_scraper scrape --out ./cards --query "Pikachu" --limit 5
-
-# Deterministic official asset lookup
-ptcg_art_scraper scrape --out ./cards --provider pokemon_official --set EX6 --query 10
+ptcg_art_scraper resolve --set EX6 --number 10
+ptcg_art_scraper resolve --set sv4 --number 100 --providers pokemontcgio_images,pkmncards
 ```
+
+Example output:
+
+```text
+[INFO] Resolving EX6 #10
+[OK]  pokemon_official Resolved
+      URL: https://assets.pokemon.com/...
+[OK] Provider: pokemon_official
+URL: https://assets.pokemon.com/...
+```
+
+### Scrape a batch
+
+```bash
+# One set with inline numbers
+ptcg_art_scraper scrape --set EX6 --numbers 10,11,12 --out ./cards
+
+# Mixed-set input file
+ptcg_art_scraper scrape --input ./cards.json --out ./cards --providers pokemon_official,pokemontcgio_images,pkmncards
+
+# Custom layout template
+ptcg_art_scraper scrape \
+  --set sv4 \
+  --numbers 25,100 \
+  --out ./cards \
+  --folder-template "{setId}/{rarity}/{number}_{name}.{fmt}"
+```
+
+Supported input formats:
+
+- **TXT**: one `SET#NUMBER` entry per line, or plain numbers when `--set` is supplied.
+- **CSV**: `set`/`set_code` plus `number`/`card_number` columns.
+- **JSON**: a list of `"SET#NUMBER"` strings or objects with `set`/`set_code` and `number`/`card_number`.
 
 ### Normalize existing images
 
@@ -49,76 +69,32 @@ ptcg_art_scraper scrape --out ./cards --provider pokemon_official --set EX6 --qu
 ptcg_art_scraper normalize --input ./raw_images --out ./normalized
 ```
 
-### Verify output
+### Verify normalized images
 
 ```bash
 ptcg_art_scraper verify --input ./normalized
 ```
 
-Exit code is non-zero if any image fails (useful in CI).
+Exit code is non-zero if any verification or batch item fails.
 
-## GUI Quick Start
+## GUI quick start
 
-A graphical interface is available for users who prefer not to use the terminal.
-
-### Install
+A graphical interface is still available for users who prefer not to use the terminal.
 
 ```bash
 pip install -e ".[gui]"
-```
-
-### Launch
-
-```bash
-# Via CLI subcommand
 ptcg_art_scraper gui
-
-# Or directly
-ptcg_art_scraper_gui
 ```
 
-### Workflow
+## Provider notes
 
-1. **New Job** – Select a source (search query, import file, or paste URLs), choose an output folder and format, then click **Build Queue**.
-2. **Queue & Progress** – Watch per-card status (resolving → fetching → normalizing → saved), pause/resume, cancel, or retry failed items.
-3. **Library** – Browse downloaded card images, view metadata from sidecar JSON files, and open images or folders.
-4. **Settings** – Configure default output folder, provider, format, concurrency, rate limit, retries, and timeout.
-5. **Help / About** – Quick-start guide, troubleshooting tips, legal note, and a **Copy Diagnostics** button for bug reports.
+### `pokemon_official`
 
-### Packaging (PyInstaller)
+Builds official asset URLs directly from the supplied set code and card number.
 
-```bash
-pip install pyinstaller
-pyinstaller --name "PTCG Art Scraper" \
-    --windowed \
-    --onefile \
-    src/ptcg_art_scraper/gui/app.py
-```
+### `pokemontcgio_images`
 
-The resulting executable will be in `dist/`.
-
-### Key options (`scrape`)
-
-| Option | Default | Description |
-|---|---|---|
-| `--provider` | `pkmncards` | Image provider (`pkmncards`, `pokemontcgio_images`, or `pokemon_official`) |
-| `--out` | *(required)* | Output directory |
-| `--query` | | Search query |
-| `--input` | | File with card identifiers/URLs |
-| `--set` | | Set code/name filter |
-| `--limit` | 0 (all) | Max cards |
-| `--concurrency` | 8 | Parallel downloads |
-| `--rate` | 2.0 | Requests / second |
-| `--retries` | 3 | Retry count |
-| `--timeout` | 20 s | HTTP timeout |
-| `--resume` / `--no-resume` | resume | Skip existing |
-| `--format` | png | `png` or `jpg` |
-| `--overwrite` | false | Re-download existing |
-
-### Local index data for `pokemontcgio_images`
-
-If you use `--provider pokemontcgio_images`, place a local clone/download of
-`PokemonTCG/pokemon-tcg-data` at:
+Uses the `PokemonTCG/pokemon-tcg-data` layout when local set metadata is available at:
 
 ```text
 <this-project>/pokemon-tcg-data/
@@ -126,38 +102,20 @@ If you use `--provider pokemontcgio_images`, place a local clone/download of
   cards/en/*.json
 ```
 
-### Deterministic official assets for `pokemon_official`
+### `pkmncards`
 
-`pokemon_official` builds image URLs directly from `--set` plus `--query` (card number)
-using the official Pokemon assets pattern, so it does not perform any metadata discovery.
+Acts as the retrieval-oriented fallback when deterministic providers are insufficient.
 
 ## Output structure
 
-```
+```text
 cards/
-├── sv4/
-│   ├── 100_charizard-ex.png
-│   ├── 100_charizard-ex.json
-│   ├── 25_pikachu.png
-│   └── 25_pikachu.json
-└── errors.jsonl          # only if failures occurred
+└── sv4/
+    ├── 100_charizard-ex.png
+    └── 100_charizard-ex.json
 ```
 
-Each `.json` sidecar contains:
-
-```json
-{
-  "provider": "pkmncards",
-  "source_page_url": "https://pkmncards.com/card/…",
-  "source_image_url": "https://…/image.png",
-  "fetched_at_utc": "2025-01-01T00:00:00+00:00",
-  "normalized_size": [750, 1050],
-  "dpi": 300,
-  "original_size": [800, 1120],
-  "sha256_original": "abc…",
-  "sha256_normalized": "def…"
-}
-```
+Each sidecar includes the provider, resolved source URL, timestamps, hashes, and normalized sizing data.
 
 ## Development
 
@@ -176,55 +134,35 @@ pytest -m "not network" -v
 
 ## Project structure
 
-```
+```text
 src/ptcg_art_scraper/
-├── cli.py                 # Typer CLI (scrape / normalize / verify / gui)
-├── models.py              # CardRef, CardAsset, FetchedImage, etc.
+├── cli.py                    # Compatibility entrypoint to the redesigned CLI
 ├── core/
-│   ├── models.py          # JobConfig, QueueItem, JobEvent (shared)
-│   └── engine.py          # ScrapeEngine with event callbacks
-├── gui/
-│   ├── app.py             # MainWindow + sidebar navigation
-│   ├── new_job.py         # New Job wizard page
-│   ├── queue_view.py      # Queue & Progress page
-│   ├── library_view.py    # Library browser page
-│   ├── settings_view.py   # Settings page
-│   └── help_view.py       # Help / About page
-├── providers/
-│   ├── base.py            # Abstract provider interface
-│   ├── pkmncards.py       # pkmncards.com provider
-│   ├── pokemontcgio_images.py  # images.pokemontcg.io provider
-│   └── pokemon_official.py  # official Pokemon asset URL provider
-├── image/
-│   └── normalize.py       # 750×1050 @ 300 DPI pipeline
-├── storage/
-│   ├── layout.py          # Output path / naming rules
-│   └── metadata.py        # Sidecar JSON persistence
-├── net/
-│   └── http.py            # Async HTTP client, retry, rate limiting
+│   ├── config/               # Resolver and batch configuration models
+│   ├── models/               # Card, batch, and legacy GUI bridge models
+│   ├── providers/            # Standardized provider adapters
+│   ├── services/             # Resolution, batch scraping, I/O, normalization
+│   ├── engine.py             # Legacy GUI bridge
+│   └── exceptions.py         # Typed user-safe exceptions
+├── ui/
+│   └── cli/                  # Typer + rich command surface
+├── providers/                # Legacy parser-heavy provider implementations
+├── storage/                  # Compatibility wrappers around output services
+├── image/                    # Compatibility wrappers around image services
+├── gui/                      # Existing graphical interface
 └── utils/
-    └── slugify.py         # Filesystem-safe slug generation
-tests/
-├── test_cli.py            # CLI smoke tests
-├── test_core_models.py    # Job/event model tests
-├── test_normalize.py      # Image pipeline + DPI golden tests
-├── test_provider_pkmncards.py  # HTML parsing with fixtures
-└── test_slugify_paths.py  # Slug + output path rules
+    └── slugify.py
 ```
 
 ## Troubleshooting
 
-* **Blocked requests?** – Reduce `--rate` (e.g. `0.5`). The default (2 req/s) is conservative.
-* **HTML layout changed?** – Provider parsing may need updating; file an issue.
-* **Timeouts?** – Increase `--timeout` (e.g. `60`).
+- **Blocked or slow requests?** Reduce `--rate` (for example `0.5`).
+- **Unexpected provider choice?** Use `resolve` first to inspect the resolution chain.
+- **Timeouts?** Increase `--timeout`.
 
 ## Legal / ethical note
 
 This tool is provided for personal, non-commercial use only. Users are responsible for complying with the terms of service of any website they scrape. Pokémon card images are © The Pokémon Company / Nintendo.
-
-## Legacy scraper
-
-The original `pkmn_card_scraper.py` (EX-series CV-based artwork extractor) is still available in the repository for reference.
 
 ## License
 
